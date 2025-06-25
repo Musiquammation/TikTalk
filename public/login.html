@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TikTalk - Login</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; margin-top: 10vh; }
+    form { display: inline-block; margin-top: 2em; }
+    input, button { display: block; margin: 1em auto; padding: 0.7em; font-size: 1em; }
+  </style>
+</head>
+<body>
+  <h1>Login to TikTalk</h1>
+  <form id="loginForm">
+    <input type="text" name="username" placeholder="Username" required />
+    <input type="password" name="password" placeholder="Password" required />
+    <button type="submit">Login</button>
+  </form>
+  <p id="error" style="color:red;"></p>
+  <script>
+    document.getElementById('loginForm').onsubmit = async function(e) {
+      e.preventDefault();
+      const username = this.username.value;
+      const password = this.password.value;
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (data.success) {
+        window.location.href = '/app';
+      } else {
+        document.getElementById('error').textContent = data.message || 'Login failed';
+      }
+    };
+  </script>
+</body>
+</html>

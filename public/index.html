@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TikTalk - Nothing to do? Chat instantly.</title>
+  <link rel="stylesheet" href="index.css" />
+</head>
+<body>
+  <div class="overlay"></div>
+  <main>
+    <h1 class="slogan">Nothing to do?<br> <span>Chat instantly.</span></h1>
+    <p class="description">
+      Feeling bored? You’re not alone.<br />
+      TikTalk connects you with real people who, just like you, have some free time and want to chat.<br />
+      No endless scrolling, no waiting—start a conversation and get a reply in seconds.<br />
+      Because when everyone’s here to talk, no message stays unanswered.
+    </p>
+    <p class="cta">
+      Join TikTalk and turn those idle moments into meaningful connections.
+    </p>
+    <div class="buttons">
+      <button id="loginBtn">Login</button>
+      <button id="signupBtn">Sign Up</button>
+    </div>
+  </main>
+
+  <script>
+    fetch('/api/check-auth', { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => {
+        if (data.authenticated) {
+          window.location.href = '/app';
+        }
+      });
+
+    document.getElementById('loginBtn').onclick = () => {
+      window.location.href = '/login';
+    };
+    document.getElementById('signupBtn').onclick = () => {
+      window.location.href = '/signup';
+    };
+  </script>
+</body>
+</html>

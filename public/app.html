@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>TikTalk</title>
+	<link rel="stylesheet" href="app.css">
+</head>
+<body>
+	<div id="container">
+		<div id="sidebar">
+			<div id="sidebarHeader">
+				<span id="usernameDisplay"></span>
+				<button id="disconnectBtn">Disconnect</button>
+			</div>
+			<div id="sidebarSearch">
+				<button id="searchBtn">Search</button>
+				<span id="searchingAnim" class="hidden">Searching<span id="searchDots"></span></span>
+			</div>
+			<div id="conversationsListWrapper">
+				<div id="conversations"></div>
+			</div>
+		</div>
+		<div id="main">
+			<div id="convHeader">
+			<span class="svgContainer">
+				<svg id="backBtn" width="20" height="20" viewBox="0 0 20 20">
+					<path d="M12 4 L6 10 L12 16" stroke="black" stroke-width="2" fill="none" stroke-linejoin="miter"/>
+				</svg>
+				<span id="convTitle"></span>
+			</span>
+			<div id="convActions">
+				<button id="reportBtn">Report</button>
+				<button id="blockBtn">Block</button>
+				<button id="unblockBtn" class="hidden">Unbock</button>
+				<button id="voteBtn" class="hidden">Vote</button>
+			</div>
+			</div>
+
+			<div id="messages"></div>
+			<div id="inputBar">
+				<input id="messageInput" type="text" placeholder="Write a message..." />
+				<button id="sendBtn">Send</button>
+			</div>
+		</div>
+	</div>
+	<script src="app.js"></script>
+</body>
+</html>

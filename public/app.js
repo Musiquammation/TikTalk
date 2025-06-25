@@ -1,4 +1,4 @@
-const ws = new WebSocket(`ws://${window.location.host}/ws`);
+const ws = new WebSocket(`${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`);
 
 let __userdata__ = null;
 

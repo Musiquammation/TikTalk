@@ -1,45 +1,52 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>TikTalk - Nothing to do? Chat instantly.</title>
-  <link rel="stylesheet" href="index.css" />
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>TikTalk - Nothing to do? Chat instantly.</title>
+	<link rel="stylesheet" href="index.css" />
 </head>
 <body>
-  <div class="overlay"></div>
-  <main>
-    <h1 class="slogan">Nothing to do?<br> <span>Chat instantly.</span></h1>
-    <p class="description">
-      Feeling bored? You’re not alone.<br />
-      TikTalk connects you with real people who, just like you, have some free time and want to chat.<br />
-      No endless scrolling, no waiting—start a conversation and get a reply in seconds.<br />
-      Because when everyone’s here to talk, no message stays unanswered.
-    </p>
-    <p class="cta">
-      Join TikTalk and turn those idle moments into meaningful connections.
-    </p>
-    <div class="buttons">
-      <button id="loginBtn">Login</button>
-      <button id="signupBtn">Sign Up</button>
-    </div>
-  </main>
+	<div class="overlay"></div>
+	<main>
+		<h1 class="slogan">Nothing to do?<br> <span>Chat instantly.</span></h1>
+		<p class="description">
+			Instead of scrolling through TikTok, click a button<br />
+			and talk to someone who, just like you, is bored right now.<br />
+			No endless feeds, no waiting — just real conversations.<br />
+			TikTalk is boredom's human alternative.
+		</p>
+		<hr />
+		<p class="description">
+			✅ Malicious users get banned instantly using AI moderation — one report and they’re gone.<br />
+			🚫 No profile pictures — you talk before you judge.<br />
+			🤝 Everyone has a trust score — you’re matched with people similar to you.
+		</p>
 
-  <script>
-    fetch('/api/check-auth', { credentials: 'include' })
-      .then(r => r.json())
-      .then(data => {
-        if (data.authenticated) {
-          window.location.href = '/app';
-        }
-      });
+		<p class="cta">Click. Connect. Talk to someone. <span style="color: #f34939;">Now.</span></p>
 
-    document.getElementById('loginBtn').onclick = () => {
-      window.location.href = '/login';
-    };
-    document.getElementById('signupBtn').onclick = () => {
-      window.location.href = '/signup';
-    };
-  </script>
+
+		<div class="buttons">
+			<button id="loginBtn">Login</button>
+			<button id="signupBtn">Sign Up</button>
+		</div>
+	</main>
+
+	<script>
+		fetch('/api/check-auth', { credentials: 'include' })
+			.then(r => r.json())
+			.then(data => {
+				if (data.authenticated) {
+					window.location.href = '/app';
+				}
+			});
+
+		document.getElementById('loginBtn').onclick = () => {
+			window.location.href = '/login';
+		};
+		document.getElementById('signupBtn').onclick = () => {
+			window.location.href = '/signup';
+		};
+	</script>
 </body>
 </html>

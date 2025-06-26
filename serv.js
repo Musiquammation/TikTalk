@@ -608,7 +608,7 @@ wss.on('connection', async ws => {
 		);
 
 		// Remove votable object
-		votables.slice(votableIndex, 1);
+		votables.splice(votableIndex, 1);
 		
 	}
 

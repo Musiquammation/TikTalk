@@ -171,7 +171,7 @@ const userSockets = new Map();
 
 class SearchingClient {
 	static DEFAULT_TOLERANCE = .1;
-	static INCREASE_TOLERANCE = .1;
+	static INCREASE_TOLERANCE = .4;
 	static SEARCH_COULDOWN = 1000;
 
 	constructor(ws, username, score, emptyCurrentSearchingClient, blacklist) {
@@ -205,6 +205,8 @@ class Discussion {
 		this.exchangeLeft = votable ? Discussion.VOTE_EXCHANGES : -1;
 		this.lastMessageDate = Date.now();
 		this.blockedBy = blockedBy;
+		// Add lastSeenBy: array of timestamps, one per user
+		this.lastSeenBy = users.map(() => Date.now());
 	}
 }
 
@@ -393,15 +395,48 @@ wss.on('connection', async ws => {
 		});
 	}
 
+	// Update lastSeenBy when listenFor changes
+	function setListenFor(username, newConvId) {
+		const ref = userSockets.get(username);
+		if (!ref) return;
+
+		const oldConvId = ref.listenFor;
+		if (oldConvId && oldConvId !== newConvId) {
+			const discussion = discussions.find(d => d.id === oldConvId && d.users.includes(username));
+			if (discussion) {
+				updateLastSeen(discussion, username);
+
+				for (const u of discussion.users) {
+					if (u === username) continue;
+
+					const ref2 = userSockets.get(u);
+					if (ref2 && ref2.listenFor === oldConvId && ref2.socket.readyState === WebSocket.OPEN) {
+						ref2.socket.send(JSON.stringify({
+							type: 'convOut',
+							user: username,
+							convId: oldConvId
+						}));
+					}
+				}
+			}
+		}
+
+		ref.listenFor = newConvId;
+	}
+
+
+	// Update on_getLatestMessages to use setListenFor
 	function on_getLatestMessages(data) {
 		const { convId } = data;
 		const username = getUsername();
-		const ref = userSockets.get(username);
-		if (ref) ref.listenFor = convId;
+		setListenFor(username, convId);
 		const discussion = discussions.find(d => d.id === convId && d.users.includes(username));
 		if (!discussion) return;
-		
 		const unreadMessages = discussion.recentMessages.filter(m => !m.readBy.includes(username));
+		const usersInConv = discussion.users.filter(u => {
+			const ref = userSockets.get(u);
+			return ref && ref.listenFor === convId;
+		});
 		send({
 			type: 'missedMessages',
 			convId,
@@ -409,14 +444,27 @@ wss.on('connection', async ws => {
 				author: m.author,
 				text: m.content,
 				date: m.date
-			}))
+			})),
+			lastSeenBy: discussion.lastSeenBy,
+			usersInConv
 		});
-
 		for (const m of discussion.recentMessages) {
 			if (!m.readBy.includes(username)) {
 				m.readBy.push(username);
 			}
 		}
+		discussion.users.forEach(u => {
+			if (u !== username) {
+				const ref = userSockets.get(u);
+				if (ref && ref.listenFor === convId && ref.socket.readyState === WebSocket.OPEN) {
+					ref.socket.send(JSON.stringify({
+						type: 'convIn',
+						user: username,
+						convId
+					}));
+				}
+			}
+		});
 	}
 
 	function on_sendMessage(data) {
@@ -471,17 +519,28 @@ wss.on('connection', async ws => {
 		for (const uname of discussion.users) {
 			if (discussion.blockedBy.includes(uname)) continue;
 			const ref = userSockets.get(uname);
-			if (ref && ref.listenFor === convId && ref.socket.readyState === WebSocket.OPEN) {
+			if (!ref || ref.socket.readyState !== WebSocket.OPEN)
+				continue;
+
+			if (ref.listenFor === convId) {
 				if (!msg.readBy.includes(uname)) {
 					msg.readBy.push(uname);
 				}
-
+	
 				ref.socket.send(JSON.stringify({
 					type: 'newMessage',
 					convId,
 					message: { author: username, text, date: msg.date }
 				}));
+			
+			} else {
+				ref.socket.send(JSON.stringify({
+					type: 'notifyMessage',
+					convId,
+				}));
+
 			}
+
 		}
 	}
 
@@ -690,13 +749,12 @@ wss.on('connection', async ws => {
 		}
 	}
 
-
-
-
-
-
-
-
+	function updateLastSeen(discussion, username) {
+		const idx = discussion.users.indexOf(username);
+		if (idx !== -1) {
+			discussion.lastSeenBy[idx] = discussion.lastMessageDate;
+		}
+	}
 
 	ws.on('message', async (message) => {
 		try {
@@ -772,12 +830,31 @@ wss.on('connection', async ws => {
 
 		if (currentSearchingClient)
 			on_stopSearch();
-		
 
 		// Remove user from typing lists
-		for (const discussion of discussions)
-			if (discussion.users.includes(__username__))
-				on_stopTyping({ convId: discussion.id });
+		for (const discussion of discussions) {
+			if (!discussion.users.includes(__username__)) continue;
+
+			const ref = userSockets.get(__username__);
+			if (ref && ref.listenFor === discussion.id) {
+				updateLastSeen(discussion, __username__);
+
+				for (const u of discussion.users) {
+					if (u === __username__) continue;
+
+					const ref2 = userSockets.get(u);
+					if (ref2 && ref2.listenFor === discussion.id && ref2.socket.readyState === WebSocket.OPEN) {
+						ref2.socket.send(JSON.stringify({
+							type: 'convOut',
+							user: __username__,
+							convId: discussion.id
+						}));
+					}
+				}
+			}
+
+			on_stopTyping({ convId: discussion.id });
+		}
 
 	});
 });

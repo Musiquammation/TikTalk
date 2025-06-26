@@ -1,9 +1,83 @@
+/* === Variables globales pour light/dark mode === */
+:root {
+	--color-bg: #fff;
+	--color-bg-alt: #f4f4f4;
+	--color-bg-sidebar: #f9f9f9;
+	--color-bg-sidebar-alt: #fafafa;
+	--color-border: #ddd;
+	--color-border-light: #e0e0e0;
+	--color-primary: #1976d2;
+	--color-primary-light: #b2e0ff;
+	--color-secondary: #f1f0f0;
+	--color-text: #222;
+	--color-text-light: #666;
+	--color-text-muted: #888;
+	--color-danger: red;
+	--color-bubble-me: #1976d2;
+	--color-bubble-other: #f1f0f0;
+	--color-bubble-me-text: #fff;
+	--color-bubble-other-text: #222;
+	--color-seen-label: #888;
+	--color-seen-label-me: #b2e0ff;
+	--color-badge-bg: #111;
+	--color-badge-text: #fff;
+	--color-btn-bg: #1976d2;
+	--color-btn-bg-hover: #125ea6;
+	--color-btn-text: #fff;
+	--color-input-bg: #fff;
+	--color-input-text: #222;
+	--color-date-separator-bg: #e3e8f0;
+	--color-date-separator-text: #333;
+	--conv-btn-bg: #f5f5f5;
+  	--conv-btn-hover: #e0e0e0;
+	--conv_btn-color: black;
+}
+
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--color-bg: #181a1b;
+		--color-bg-alt: #23272a;
+		--color-bg-sidebar: #23272a;
+		--color-bg-sidebar-alt: #202225;
+		--color-border: #333;
+		--color-border-light: #222;
+		--color-primary: #90caf9;
+		--color-primary-light: #1976d2;
+		--color-secondary: #222326;
+		--color-text: #f5f5f5;
+		--color-text-light: #bbb;
+		--color-text-muted: #aaa;
+		--color-danger: #ff6b6b;
+		--color-bubble-me: #1976d2;
+		--color-bubble-other: #23272a;
+		--color-bubble-me-text: #fff;
+		--color-bubble-other-text: #f5f5f5;
+		--color-seen-label: #bbb;
+		--color-seen-label-me: #90caf9;
+		--color-badge-bg: #fff;
+		--color-badge-text: #111;
+		--color-btn-bg: #90caf9;
+		--color-btn-bg-hover: #1976d2;
+		--color-btn-text: #181a1b;
+		--color-input-bg: #23272a;
+		--color-input-text: #f5f5f5;
+		--color-date-separator-bg: #23272a;
+		--color-date-separator-text: #fff;
+		--conv-btn-bg: #0a0a0a;
+    	--conv-btn-hover: #1f1f1f;
+		--conv_btn-color: white;
+	}
+}
+
 body {
 	margin: 0;
 	font-family: Arial, sans-serif;
 	height: 100vh;
 	height: 100dvh;
 	overflow: hidden;
+	background: var(--color-bg);
+	color: var(--color-text);
 }
 
 #container {
@@ -11,12 +85,13 @@ body {
 	width: 100vw;
 	height: 100vh;
 	height: 100dvh;
+	background: var(--color-bg);
 }
 
 #sidebar {
 	width: 300px;
-	background: #f4f4f4;
-	border-right: 1px solid #ddd;
+	background: var(--color-bg-alt);
+	border-right: 1px solid var(--color-border);
 	display: flex;
 	flex-direction: column;
 	height: 100vh;
@@ -32,9 +107,9 @@ body {
 	padding: 1rem;
 	font-size: 1.15em;
 	font-weight: bold;
-	color: #1976d2;
-	border-bottom: 1px solid #e0e0e0;
-	background: #f9f9f9;
+	color: var(--color-primary);
+	border-bottom: 1px solid var(--color-border-light);
+	background: var(--color-bg-sidebar);
 }
 
 #usernameDisplay {
@@ -42,30 +117,34 @@ body {
 	text-align: left;
 	font-weight: bold;
 	font-size: 1em;
-	color: #1976d2;
+	color: var(--color-primary);
 }
 
 #disconnectBtn {
 	margin-left: 1em;
 	padding: 6px 18px;
-	border-radius: 5px;
-	background: #f5f5f5;
+	border-radius: 6px;
 	cursor: pointer;
-	transition: background 0.2s;
-	border: 1px solid red;
-	color: red;
+	transition: background 0.2s, color 0.2s;
+	
+	background: var(--conv-btn-bg);
+	border: 1.5px solid var(--color-danger);
+	color: var(--color-danger);
 }
+
 #disconnectBtn:hover {
-	background: #e0e0e0;
+	background: var(--color-danger);
+	color: white;;
 }
+
 
 #sidebarSearch {
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	padding: 1rem;
-	border-bottom: 1px solid #e0e0e0;
-	background: #fafafa;
+	border-bottom: 1px solid var(--color-border-light);
+	background: var(--color-bg-sidebar-alt);
 }
 
 #searchBtn {
@@ -73,26 +152,24 @@ body {
 	font-size: 1em;
 	border-radius: 5px;
 	border: 1px solid #bbb;
-	background: #f5f5f5;
+	background: var(--color-bg-sidebar);
 	cursor: pointer;
 	transition: background 0.2s;
 }
 #searchBtn:hover {
-	background: #e0e0e0;
+	background: var(--color-bg-sidebar-alt);
 }
 
 #searchingAnim {
 	font-style: italic;
-	color: #888;
-	font-size: 1em;
-	margin-left: 6px;
+	color: var(--color-text-muted);
 }
 
 #conversationsListWrapper {
 	flex: 1;
 	overflow-y: auto;
 	padding: 0;
-	background: #f4f4f4;
+	background: var(--color-bg-alt);
 }
 
 #conversations {
@@ -106,6 +183,7 @@ body {
 	height: 100vh; /* if dvh is not supported, let's use vh */
 	height: 100dvh;
 	min-width: 0;
+	background: var(--color-bg);
 }
 
 #messages {
@@ -114,27 +192,68 @@ body {
 	overflow-y: auto;
 	height: 0;
 	min-height: 0;
-	background: #fff;
+	background: var(--color-bg);
 }
 
 
 #inputBar {
 	display: flex;
-	border-top: 1px solid #ddd;
+	border-top: 1px solid var(--color-border);
 	padding: 8px;
-	background: #fff;
+	background: var(--color-bg);
 }
 
 #messageInput {
 	flex: 1;
 	padding: 8px;
 	font-size: 1em;
+	border-radius: 6px;
 }
 
 #sendBtn {
-	padding: 8px 16px;
-	margin-left: 8px;
+	border-radius: 6px;
 }
+
+/* Amélioration contraste boutons */
+#sendBtn, #searchBtn {
+	color: #fff;
+	background: #1976d2;
+	border: 1px solid #125ea6;
+	cursor: pointer;
+}
+#sendBtn:hover, #searchBtn:hover {
+	background: #125ea6;
+	color: #fff;
+}
+
+/* Amélioration contraste .date-separator */
+.date-separator {
+	color: #222;
+	background: #e3e8f0;
+	border: 1px solid #b0b0b0;
+}
+
+/* Amélioration contraste #messageInput */
+#messageInput {
+    flex: 1;
+    padding: 8px;
+    font-size: 1em;
+    border-radius: 6px;
+    background: var(--color-input-bg);
+    color: var(--color-input-text);
+    border: 1.5px solid var(--color-primary);
+	margin-right: 8px;
+}
+
+#messageInput:focus {
+    outline: 2px solid var(--color-primary);
+    color: var(--color-input-text);
+}
+
+#messageInput::placeholder {
+    color: var(--color-text-muted);
+}
+
 
 .conversation {
 	position: relative;
@@ -147,24 +266,24 @@ body {
 }
 
 .conversation.selected {
-	background: #e0e0e0;
+	background: var(--color-border-light);
 }
 
 #convHeader {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding: 8px 16px;
-  border-bottom: 1px solid #ddd;
-  background: #fafafa;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 0.5rem;
+	padding: 8px 16px;
+	border-bottom: 1px solid var(--color-border);
+	background: var(--color-bg-sidebar-alt);
 }
-
 
 #convTitle {
 	font-weight: bold;
 	font-size: 1.1em;
+	color: var(--color-text);
 }
 
 #convActions {
@@ -173,28 +292,45 @@ body {
 }
 
 #convActions button {
-	padding: 4px 12px;
-	border-radius: 4px;
-	border: 1px solid #bbb;
-	background: #f5f5f5;
-	cursor: pointer;
+  background-color: var(--conv-btn-bg);
+  color: var(--conv-btn-text);
+  border: 1.5px solid var(--conv-btn-hover);
+  border-radius: 6px;
+  transition: background-color 0.2s, color 0.2s;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+#convActions button:hover {
+  background-color: var(--conv-btn-hover);
+  color: var(--conv-btn-text);
 }
 
-#convActions button:hover {
-	background: #e0e0e0;
+
+#connectBtn {
+	color: #fff;
+	background: var(--color-danger);
+	border: 1.5px solid var(--color-danger);
+	border-radius: 6px;
+	padding: 6px 18px;
+	cursor: pointer;
+	transition: background 0.2s, color 0.2s;
+}
+#connectBtn:hover {
+	background: #fff;
+	color: var(--color-danger);
 }
 
 .hidden {
-	display: none !important;
+	display: none;
 }
 
 .not-reportable {
-	background: #eee !important;
-	color: #aaa !important;
+	background: var(--color-border-light);
+	color: var(--color-text-light);
 	pointer-events: none;
 }
 .reportable:hover {
-	background: #ffe0e0 !important;
+	background: #ffe0e0;
 	cursor: pointer;
 }
 
@@ -209,8 +345,8 @@ body {
 	min-width: 22px;
 	height: 22px;
 	line-height: 22px;
-	background: #111;
-	color: #fff;
+	background: var(--color-badge-bg);
+	color: var(--color-badge-text);
 	border-radius: 50%;
 	text-align: center;
 	font-size: 0.95em;
@@ -240,20 +376,22 @@ body {
 	flex-direction: column;
 	font-size: 1rem;
 	box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+	background: var(--color-bubble-other);
+	color: var(--color-bubble-other-text);
 }
 
 
 .message-bubble.me {
-	background: #1976d2;
-	color: #fff;
+	background: var(--color-bubble-me);
+	color: var(--color-bubble-me-text);
 	align-self: flex-end;
 	border-bottom-right-radius: 4px;
 	margin-left: auto;
 }
 
 .message-bubble.other {
-	background: #f1f0f0;
-	color: #222;
+	background: var(--color-bubble-other);
+	color: var(--color-bubble-other-text);
 	align-self: flex-start;
 	border-bottom-left-radius: 4px;
 	margin-right: auto;
@@ -263,12 +401,12 @@ body {
 	font-size: 0.92em;
 	font-weight: 600;
 	margin-bottom: 2px;
-	color: #1976d2;
+	color: var(--color-primary);
 }
 
 .message-time {
 	font-size: 0.82em;
-	color: #888;
+	color: var(--color-text-muted);
 	align-self: flex-end;
 	margin-top: 4px;
 }
@@ -281,7 +419,7 @@ body {
 	text-align: center;
 	margin: 18px 0 10px 0;
 	font-size: 0.98em;
-	color: #666;
+	color: var(--color-text-light);
 	font-weight: 500;
 	background: rgba(255,255,255,0.8);
 	border-radius: 12px;
@@ -293,12 +431,19 @@ body {
 	box-shadow: 0 1px 2px rgba(0,0,0,0.03);
 }
 
-
-
-
-
-
-
+.seen-label {
+	display: block;
+	font-size: 0.85em;
+	color: var(--color-seen-label);
+	margin-top: 2px;
+	margin-left: 4px;
+	font-style: italic;
+	text-align: right;
+	background: none;
+}
+.message-bubble.me .seen-label {
+	color: var(--color-seen-label-me);
+}
 
 @media (max-width: 700px) {
 	#container {
@@ -311,7 +456,7 @@ body {
 		bottom: 0;
 		width: 80vw;
 		max-width: 350px;
-		background: #f4f4f4;
+		background: var(--color-bg-alt);
 		z-index: 10;
 		transition: transform 0.3s ease;
 		transform: translateX(-100%);
@@ -323,9 +468,10 @@ body {
 	#main {
 		flex: 1;
 		margin-left: 0;
+		background: var(--color-bg);
 	}
 	#backBtn {
-		display: inline-block !important;
+		display: inline-block;
 		margin-right: 10px;
 		font-size: 1.3em;
 		background: none;
@@ -337,22 +483,29 @@ body {
 		max-width: 90%;
 		font-size: 0.98rem;
 		padding: 8px 10px 5px 10px;
+		background: var(--color-bubble-other);
+		color: var(--color-bubble-other-text);
+	}
+	.message-bubble.me {
+		background: var(--color-bubble-me);
+		color: var(--color-bubble-me-text);
 	}
 	.date-separator {
-		font-size: 0.93em;
-		padding: 2px 10px;
+		color: var(--color-text-light);
+		background: rgba(255,255,255,0.8);
 	}
 }
 
 @media (min-width: 701px) {
 	#sidebar {
-		transform: none !important;
+		transform: none;
 		position: static;
 		width: 300px;
 		box-shadow: none;
+		background: var(--color-bg-alt);
 	}
 	#backBtn {
-		display: none !important;
+		display: none;
 	}
 }
 

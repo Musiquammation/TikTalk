@@ -4,6 +4,34 @@ let __userdata__ = null;
 
 let reportTimestamps = null;
 
+// --- Seen feature ---
+let lastSeenBy = [];
+let usersInConv = [];
+
+function updateSeenState(data) {
+	if (data.lastSeenBy) lastSeenBy = data.lastSeenBy;
+	if (data.usersInConv) usersInConv = data.usersInConv;
+}
+
+function getSeenLabel(msg, idx, msgs) {
+	const isMe = msg.author === getUserdata().username;
+	if (!isMe) return null;
+	if (!lastSeenBy || lastSeenBy.length === 0) return null;
+	// Only show on the most recent message sent by me that is seen by others
+	const myMsgs = msgs.filter(m => m.author === getUserdata().username);
+	if (myMsgs.length === 0) return null;
+	const lastMyMsg = myMsgs[myMsgs.length - 1];
+	if (msg !== lastMyMsg) return null;
+	// Who has seen this message?
+	const seenUsers = usersInConv.filter((u, i) => lastSeenBy[i] >= msg.date && u !== getUserdata().username);
+	if (seenUsers.length === 0) return null;
+	if (usersInConv.length === 2) {
+		return 'Seen';
+	} else {
+		return 'Seen by ' + seenUsers.join(', ');
+	}
+}
+
 function openDB() {
 	return new Promise((resolve, reject) => {
 		const request = indexedDB.open("chatDB", 1);
@@ -134,7 +162,68 @@ function renderMessages() {
 	const currentUser = getUserdata().username;
 	let lastDate = null;
 
-	msgs.forEach((msg) => {
+	// --- Gestion du label Seen/Seen by ---
+	let seenIdx = -1;
+	let seenLabel = null;
+	if (usersInConv.length === 1 && lastSeenBy && lastSeenBy.length > 0) {
+		// Cas solo : on prend le max lastSeenBy (hors moi, mais ici il n'y a que moi)
+		let maxSeen = -1;
+		for (let i = 0; i < usersInConv.length; i++) {
+			if (usersInConv[i] !== currentUser) {
+				if (lastSeenBy[i] > maxSeen) maxSeen = lastSeenBy[i];
+			}
+		}
+		// Si on ne trouve pas d'autre, on prend quand même le max global (cas solo)
+		if (maxSeen === -1) {
+			maxSeen = Math.max(...lastSeenBy);
+		}
+
+		if (maxSeen > 0) {
+			for (let i = msgs.length - 1; i >= 0; i--) {
+				if (msgs[i].author === currentUser && msgs[i].date <= maxSeen) {
+					seenIdx = i;
+					seenLabel = 'Seen';
+					break;
+				}
+			}
+		}
+	} else if (usersInConv.length === 2) {
+		// Cas 1-1 : dernier message écrit par moi
+		for (let i = msgs.length - 1; i >= 0; i--) {
+			if (msgs[i].author === currentUser) {
+				seenIdx = i;
+				seenLabel = 'Seen';
+				break;
+			}
+		}
+	} else if (usersInConv.length > 2 && lastSeenBy && lastSeenBy.length > 0) {
+		// Groupe : on cherche le timestamp max des autres
+		let maxSeen = -1;
+		let seenUsers = [];
+		for (let i = 0; i < usersInConv.length; i++) {
+			if (usersInConv[i] !== currentUser && lastSeenBy[i] > maxSeen) {
+				maxSeen = lastSeenBy[i];
+			}
+		}
+		if (maxSeen > 0) {
+			// Qui a vu ce message ?
+			for (let i = 0; i < usersInConv.length; i++) {
+				if (usersInConv[i] !== currentUser && lastSeenBy[i] === maxSeen) {
+					seenUsers.push(usersInConv[i]);
+				}
+			}
+			// Trouver le message le plus récent <= maxSeen
+			for (let i = msgs.length - 1; i >= 0; i--) {
+				if (msgs[i].date <= maxSeen) {
+					seenIdx = i;
+					seenLabel = 'Seen by ' + seenUsers.join(', ');
+					break;
+				}
+			}
+		}
+	}
+
+	msgs.forEach((msg, idx) => {
 		const msgDate = new Date(msg.date);
 		const dayString = msgDate.toLocaleDateString(undefined, {
 			weekday: 'long',
@@ -188,11 +277,9 @@ function renderMessages() {
 			author.textContent = msg.author;
 			bubble.appendChild(author);
 		}
-
 		const text = document.createElement('div');
 		text.textContent = msg.text;
 		bubble.appendChild(text);
-
 		const time = document.createElement('div');
 		time.className = 'message-time';
 		time.textContent = msgDate.toLocaleTimeString(undefined, {
@@ -201,10 +288,15 @@ function renderMessages() {
 			hour12: false,
 		});
 		bubble.appendChild(time);
-
+		// Add seen label if needed
+		if (idx === seenIdx && seenLabel) {
+			const seenDiv = document.createElement('div');
+			seenDiv.className = 'seen-label';
+			seenDiv.textContent = seenLabel;
+			bubble.appendChild(seenDiv);
+		}
 		messagesDiv.appendChild(bubble);
 	});
-
 	messagesDiv.scrollTop = messagesDiv.scrollHeight;
 }
 
@@ -262,14 +354,20 @@ sendBtn.onclick = () => {
 	if (!text || !selectedConvId) return;
 	const userdata = getUserdata();
 
+	// Envoi du message
 	ws.send(JSON.stringify({
 		type: 'sendMessage',
 		convId: selectedConvId,
 		text,
 		userdata
 	}));
+
+	// Nettoyage
 	messageInput.value = '';
+	sendStopTyping();
+	if (typingTimeout) clearTimeout(typingTimeout);
 };
+
 
 messageInput.addEventListener('keydown', e => {
 	if (e.key === 'Enter') sendBtn.onclick();
@@ -364,15 +462,12 @@ async function loadRecentMessages(convId, limit = 16) {
 
 async function fillMissedMessages(data) {
 	const convId = data.convId;
-
+	updateSeenState(data);
 	let oldMessages = await loadRecentMessages(convId);
 	const mergedMessages = [...oldMessages, ...data.messages];
 	messages.set(convId, mergedMessages);
-	
 	await saveConversationMessages(convId, data.messages);
-
 	renderMessages();
-
 }
 
 
@@ -558,21 +653,6 @@ messageInput.addEventListener('blur', () => {
 });
 
 // Quand on envoie un message, on arrête le typing
-sendBtn.onclick = () => {
-	const text = messageInput.value.trim();
-	if (!text || !selectedConvId) return;
-	const userdata = getUserdata();
-
-	ws.send(JSON.stringify({
-		type: 'sendMessage',
-		convId: selectedConvId,
-		text,
-		userdata
-	}));
-	messageInput.value = '';
-	sendStopTyping();
-	if (typingTimeout) clearTimeout(typingTimeout);
-};
 
 function reportResult(data) {
 	let prefix;
@@ -592,9 +672,53 @@ function reportResult(data) {
 }
 
 
+
+function notifyMessage(data) {
+	// Incrémente missedMessages pour la conversation concernée
+	const conv = conversations.find(c => c.id === data.convId);
+	if (!conv)
+		return;
+
+	if (!conv.missedMessages) conv.missedMessages = 0;
+	conv.missedMessages += 1;
+
+	// Met à jour/crée le badge dans le DOM
+	const convDivs = conversationsDiv.querySelectorAll('.conversation');
+	for (const div of convDivs) {
+		if ((div.textContent || '').replace(/\+?\d*$/, '').trim() === (conv.title || conv.id)) {
+			let badge = div.querySelector('.missed-badge');
+			let badgeValue = conv.missedMessages > 9 ? '+9' : conv.missedMessages;
+			if (!badge) {
+				badge = document.createElement('span');
+				badge.className = 'missed-badge';
+				div.appendChild(badge);
+			}
+			badge.textContent = badgeValue;
+			badge.title = badgeValue + ' missed messages';
+			break;
+		}
+	}
+
+
+	// Send notification
+	(Notification.permission === 'granted'
+		? Promise.resolve('granted')
+		: Notification.requestPermission()
+	).then(p => {
+		if (p !== 'granted')
+			return;
+		
+		new Notification('Tiktalk — New message', {
+			body: `${conv.title} sent you a message`,	
+		});
+	});
+
+}
+
 ws.onmessage = (event) => {
 	const data = JSON.parse(event.data);
 	console.log(data);
+	
 	switch (data.type) {
 		case 'convList':
 			conversations = data.conversations;
@@ -653,6 +777,29 @@ ws.onmessage = (event) => {
 		case 'reportResult':
 			reportResult(data);
 			break;
+
+		case 'convIn':
+		case 'convOut':
+			if (data.convId === selectedConvId) {
+				if (data.type === 'convIn' && !usersInConv.includes(data.user)) {
+					usersInConv.push(data.user);
+				}
+				if (data.type === 'convOut') {
+					// Met à jour lastSeenBy pour cet utilisateur
+					const idx = usersInConv.indexOf(data.user);
+					if (idx !== -1) {
+						lastSeenBy[idx] = Date.now();
+					}
+					usersInConv = usersInConv.filter(u => u !== data.user);
+				}
+				renderMessages();
+			}
+			break;
+
+		case 'notifyMessage': {
+			notifyMessage(data);
+			break;
+		}
 
 		default:
 			throw new Error(`Unknown type: ${data.type}`);

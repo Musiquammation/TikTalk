@@ -5,6 +5,7 @@ const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const http = require('http');
 const WebSocket = require('ws');
+const nodemailer = require('nodemailer');
 require('dotenv').config();
 
 const app = express();
@@ -36,6 +37,8 @@ app.get('/app', isAuthenticated, (req, res) => res.sendFile(path.join(__dirname,
 app.get('/api/check-auth', (req, res) => res.json({ authenticated: !!req.session?.username }));
 app.get('/login', (req, res) => req.session?.username ? res.redirect('/app') : res.sendFile(path.join(__dirname, 'public', 'login.html')));
 app.get('/signup', (req, res) => req.session?.username ? res.redirect('/app') : res.sendFile(path.join(__dirname, 'public', 'signup.html')));
+app.get('/forgot', (req, res) => res.sendFile(path.join(__dirname, 'public', 'forgot.html')));
+app.get('/reset', (req, res) => res.sendFile(path.join(__dirname, 'public', 'reset.html')));
 
 const pool = new Pool({
 	connectionString: process.env.DATABASE_URL,
@@ -915,12 +918,136 @@ function banUser(username, banDuration) {
 	}
 }
 
+// Nodemailer transporter
+const transporter = nodemailer.createTransport({
+	service: 'gmail',
+	auth: {
+		user: 'villagerstudioautomailer@gmail.com',
+		pass: 'gwst qjbi nbfg hqeo'
+	}
+});
 
+// Temporary storage for reset codes
+const resetCodes = new Map(); // email/username -> { code, expires, timeout, userId }
 
+function generateResetCode() {
+	return Math.floor(100000 + Math.random() * 900000).toString(); // 6 digits
+}
 
+// Route to request password reset
+app.post('/api/forgot-password', async (req, res) => {
+	const { identifier } = req.body; // email or username
+	if (!identifier) return res.json({ success: false, message: 'Field required' });
 
+	try {
+		const result = await pool.query(
+			'SELECT id, email, username FROM tiktalk_users WHERE email = $1 OR username = $1',
+			[identifier]
+		);
+		if (result.rows.length !== 1) return res.json({ success: false, message: 'User not found' });
+		const user = result.rows[0];
+		const code = generateResetCode();
+		const expires = Date.now() + 60 * 60 * 1000; // 1h
+		if (resetCodes.has(user.email)) {
+			clearTimeout(resetCodes.get(user.email).timeout);
+		}
+		const timeout = setTimeout(() => resetCodes.delete(user.email), 60 * 60 * 1000);
+		resetCodes.set(user.email, { code, expires, timeout, userId: user.id, username: user.username, email: user.email });
 
+		await transporter.sendMail({
+			from: 'villagerstudioautomailer@gmail.com',
+			to: user.email,
+			subject: 'TikTalk password reset',
+			html: `<div style=\"font-family:sans-serif;padding:2em;background:#f9f9f9;border-radius:8px;max-width:400px;margin:auto;\">
+				<h2 style=\"color:#4a90e2;\">Password reset</h2>
+				<p>Hello <b>${user.username}</b>,</p>
+				<p>Here is your reset code, valid for 1 hour:</p>
+				<div style=\"font-size:2em;font-weight:bold;letter-spacing:4px;color:#333;background:#e6f0fa;padding:1em 0;border-radius:6px;text-align:center;\">${code}</div>
+				<p>If you did not request this, just ignore this email.</p>
+				<p style=\"font-size:0.9em;color:#888;\">TikTalk</p>
+			</div>`
+		});
+		res.json({ success: true, message: 'Email sent' });
+	} catch (err) {
+		console.error(err);
+		res.json({ success: false, message: 'Server error' });
+	}
+});
 
+// Code verification (accepts email or username)
+app.post('/api/verify-reset-code', async (req, res) => {
+	const { email: identifier, code } = req.body;
+	let entry = resetCodes.get(identifier);
+	let email = identifier;
+	if (!entry) {
+		// Try to find by username in resetCodes
+		for (const [key, value] of resetCodes.entries()) {
+			if (value.username === identifier) {
+				entry = value;
+				email = value.email;
+				break;
+			}
+		}
+	}
+	if (!entry) {
+		// Try to get email from DB if identifier is a username
+		try {
+			const result = await pool.query('SELECT email FROM tiktalk_users WHERE username = $1', [identifier]);
+			if (result.rows.length === 1) {
+				email = result.rows[0].email;
+				entry = resetCodes.get(email);
+			}
+		} catch (err) {
+			return res.json({ success: false, message: 'Server error' });
+		}
+	}
+	if (!entry || entry.code !== code || entry.expires < Date.now()) {
+		return res.json({ success: false, message: 'Invalid or expired code' });
+	}
+	res.json({ success: true });
+});
+
+// Password change (accepts email or username)
+app.post('/api/reset-password', async (req, res) => {
+	const { email: identifier, code, password } = req.body;
+	let entry = resetCodes.get(identifier);
+	let email = identifier;
+	if (!entry) {
+		// Try to find by username in resetCodes
+		for (const [key, value] of resetCodes.entries()) {
+			if (value.username === identifier) {
+				entry = value;
+				email = value.email;
+				break;
+			}
+		}
+	}
+	if (!entry) {
+		// Try to get email from DB if identifier is a username
+		try {
+			const result = await pool.query('SELECT email FROM tiktalk_users WHERE username = $1', [identifier]);
+			if (result.rows.length === 1) {
+				email = result.rows[0].email;
+				entry = resetCodes.get(email);
+			}
+		} catch (err) {
+			return res.json({ success: false, message: 'Server error' });
+		}
+	}
+	if (!entry || entry.code !== code || entry.expires < Date.now()) {
+		return res.json({ success: false, message: 'Invalid or expired code' });
+	}
+	try {
+		const hash = await bcrypt.hash(password, 10);
+		await pool.query('UPDATE tiktalk_users SET password_hash = $1 WHERE id = $2', [hash, entry.userId]);
+		clearTimeout(entry.timeout);
+		resetCodes.delete(entry.email);
+		res.json({ success: true });
+	} catch (err) {
+		console.error(err);
+		res.json({ success: false, message: 'Server error' });
+	}
+});
 
 
 

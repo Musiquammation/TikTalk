@@ -14,6 +14,7 @@
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "express-session": "^1.18.1",
+    "nodemailer": "^7.0.3",
     "pg": "^8.16.2",
     "ws": "^8.18.2"
   }

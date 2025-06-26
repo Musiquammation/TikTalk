@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Reset password - TikTalk</title>
+	<link rel="stylesheet" href="forgot.css">
+</head>
+<body>
+	<div class="forgot-container">
+		<h2>Reset password</h2>
+		<form id="resetForm">
+			<label for="identifier">Email or username</label>
+			<input type="text" id="identifier" name="identifier" required placeholder="Your email or username">
+			<label for="code">Code received by email</label>
+			<input type="text" id="code" name="code" required placeholder="6-digit code">
+			<label for="password">New password</label>
+			<input type="password" id="password" name="password" required placeholder="New password">
+			<button type="submit">Change password</button>
+			<div id="resetMsg"></div>
+		</form>
+		<a href="login.html" class="back-link">Back to login</a>
+	</div>
+	<script src="reset.js"></script>
+</body>
+</html>

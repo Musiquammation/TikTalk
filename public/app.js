@@ -773,3 +773,15 @@ disconnectBtn.addEventListener('click', async () => {
 });
 
 
+// Keyboard for mobile users
+function adjustMainHeight() {
+	const main = document.getElementById("main");
+	if (window.visualViewport) {
+		const height = window.visualViewport.height;
+		main.style.height = `${height}px`;
+		main.style.maxHeight = `${height}px`;
+	}
+}
+
+window.visualViewport?.addEventListener("resize", adjustMainHeight);
+window.addEventListener("load", adjustMainHeight);

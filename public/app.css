@@ -2,13 +2,15 @@ body {
 	margin: 0;
 	font-family: Arial, sans-serif;
 	height: 100vh;
+	height: 100dvh;
 	overflow: hidden;
 }
 
 #container {
 	display: flex;
-	height: 100vh;
 	width: 100vw;
+	height: 100vh;
+	height: 100dvh;
 }
 
 #sidebar {
@@ -18,13 +20,15 @@ body {
 	display: flex;
 	flex-direction: column;
 	height: 100vh;
+	height: 100dvh;
 	min-width: 220px;
 }
 
 #sidebarHeader {
 	display: flex;
-	align-items: center;
-	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	align-items: flex-start;
 	padding: 1rem;
 	font-size: 1.15em;
 	font-weight: bold;
@@ -147,13 +151,16 @@ body {
 }
 
 #convHeader {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	padding: 8px 16px;
-	border-bottom: 1px solid #ddd;
-	background: #fafafa;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 8px 16px;
+  border-bottom: 1px solid #ddd;
+  background: #fafafa;
 }
+
 
 #convTitle {
 	font-weight: bold;

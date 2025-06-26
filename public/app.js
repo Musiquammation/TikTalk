@@ -574,8 +574,22 @@ sendBtn.onclick = () => {
 	if (typingTimeout) clearTimeout(typingTimeout);
 };
 
-// Quand on change de conversation, reset typing
-
+function reportResult(data) {
+	let prefix;
+	switch (data.isEvil) {
+	case 0:
+		alert(`Report rejected. (Warning: getting rejecting too much may ban you account for 7 days)`);
+		break;
+	
+	case 1:
+		alert(`Report successed! ${data.author} has been definitively banned.`);
+		break;
+	
+	case -1:
+		alert(`Sorry, an error occured`);
+		break;
+	}
+}
 
 
 ws.onmessage = (event) => {
@@ -635,7 +649,13 @@ ws.onmessage = (event) => {
 			typingState[data.convId] = data.users;
 			renderTypingUsers();
 			break;
+		
+		case 'reportResult':
+			reportResult(data);
+			break;
 
+		default:
+			throw new Error(`Unknown type: ${data.type}`);
 	}
 };
 

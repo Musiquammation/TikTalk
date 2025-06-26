@@ -50,7 +50,7 @@ const pool = new Pool({
 			username VARCHAR(255) UNIQUE NOT NULL,
 			email VARCHAR(255) UNIQUE NOT NULL,
 			password_hash VARCHAR(255) NOT NULL,
-			score FLOAT DEFAULT 1,
+			score FLOAT DEFAULT 3,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			ban BIGINT DEFAULT 0
 		);
@@ -222,8 +222,8 @@ const discussions = [];
 const votables = [];
 
 
-const TRUST_MIN = 1;
-const TRUST_BADREPORT_FACTOR = .5;
+const TRUST_BADREPORT_FACTOR = .85; // high since moderation API is'nt strong enough
+const BAD_REPORT_BAN_DAYS = 7;
 
 function getScoreCoeff(x) {
 	return 2/(1+Math.exp(-x));
@@ -501,9 +501,17 @@ wss.on('connection', async ws => {
 		if (!msg) throw new Error("Message not found");;
 
 		const isEvil = await isTextEvil(content);
-		console.log(`[REPORT] Author: ${msg.author}, Result: ${isEvil}, Content: "${msg.content.replace(/\n/g, "\\n")}"`);
+		console.log(`[REPORT] Author: ${msg.author}, Result: ${['!err', 'safe', 'evil'][isEvil+1]}, Content: "${msg.content.replace(/\n/g, "\\n")}"`);
+
+		send({
+			type: 'reportResult',
+			isEvil,
+			content: msg.content,
+			author: msg.author
+		});
 
 		switch (isEvil) {
+		// Safe msg
 		case 0:
 		{
 			const res = await pool.query(
@@ -520,18 +528,20 @@ wss.on('connection', async ws => {
 			return;
 		}
 
+		// Evil msg
 		case 1:
 		{
-			banUser(msg.author, -1);
+			banUser(msg.author, BAD_REPORT_BAN_DAYS * 86400000);
 			
 			// Close socket
-			const ref = userSockets.get(m.author);
+			const ref = userSockets.get(msg.author);
 			if (ref && ref.socket.readyState === WebSocket.OPEN)
 				ref.socket.close();
 
 			return;
 		}
 		
+		// Error
 		case -1:
 		{			
 			send({ type: 'error', why: "Moderation service is out"});
@@ -773,10 +783,43 @@ wss.on('connection', async ws => {
 
 
 /**
- * @return 0: safe, 1: evil, -1: error
+ * Checks if the given text contains harmful content using Aspose moderation API.
+ * @param {string} text - The text to check.
+ * @returns {Promise<0|1|-1>} - 0 = safe, 1 = harmful, -1 = error
  */
 async function isTextEvil(text) {
-	return -1;
+	const token = process.env.MODERATION_TOKEN;
+	const url = process.env.MOERATION_ADDRESS;
+
+	if (!token || !url) {
+		console.error("Missing MODERATION_TOKEN or MOERATION_ADDRESS in .env");
+		return -1;
+	}
+
+	const params = new URLSearchParams();
+	params.append('InputText', text);
+	params.append('__RequestVerificationToken', token);
+
+	try {
+		const response = await fetch(url, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/x-www-form-urlencoded'
+			},
+			body: params.toString()
+		});
+
+		const data = await response.json();
+
+		console.log(data);
+
+		if (!data.success) return -1;
+
+		return data.hateSpeechDetected ? 1 : 0;
+	} catch (error) {
+		console.error('Moderation error:', error);
+		return -1;
+	}
 }
 
 
@@ -854,11 +897,22 @@ setInterval(() => {
 
 
 
-function banUser(username, banDate) {
+
+function banUser(username, banDuration) {
+	const banDate = banDuration < 0 ? -1 : Date.now() + banDuration;
+
 	pool.query(
 		'UPDATE tiktalk_users SET ban = $1 WHERE username = $2',
 		[banDate, username]
 	);
+
+	const ref = userSockets.get(username);
+	if (ref && ref.socket.readyState === WebSocket.OPEN) {
+		ref.socket.send(JSON.stringify({
+			type: 'ban',
+			ban: banDate
+		}));		
+	}
 }
 
 

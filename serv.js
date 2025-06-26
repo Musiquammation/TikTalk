@@ -603,13 +603,15 @@ wss.on('connection', async ws => {
 		const username = getUsername();
 		const convId = data.convId;
 		const discussion = discussions.find(d => d.id === convId && d.users.includes(username));
-		if (!discussion) return;
+		if (!discussion || discussion.users.includes(username)) return;
+
 		if (!discussion.typingUsers.includes(username)) {
 			discussion.typingUsers.push(username);
 		}
+
 		// Notify other users
 		discussion.users.forEach(u => {
-			if (u !== username) {
+			if (u !== username && !discussion.users.includes(u)) {
 				const ref = userSockets.get(u);
 				if (ref && ref.socket.readyState === WebSocket.OPEN) {
 					ref.socket.send(JSON.stringify({
@@ -626,7 +628,7 @@ wss.on('connection', async ws => {
 		const username = getUsername();
 		const convId = data.convId;
 		const discussion = discussions.find(d => d.id === convId && d.users.includes(username));
-		if (!discussion) return;
+		if (!discussion || discussion.users.includes(username)) return;
 		discussion.typingUsers = discussion.typingUsers.filter(u => u !== username);
 		
 		// Notify other users

@@ -9,7 +9,6 @@ body {
 	display: flex;
 	height: 100vh;
 	width: 100vw;
-	/* Prevent body scroll, let #messages scroll */
 }
 
 #sidebar {
@@ -100,7 +99,8 @@ body {
 	flex: 1;
 	display: flex;
 	flex-direction: column;
-	height: 100vh;
+	height: 100vh; /* if dvh is not supported, let's use vh */
+	height: 100dvh;
 	min-width: 0;
 }
 
@@ -110,7 +110,6 @@ body {
 	overflow-y: auto;
 	height: 0;
 	min-height: 0;
-	max-height: 100vh;
 	background: #fff;
 }
 

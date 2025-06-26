@@ -15,7 +15,7 @@ body, html {
 
   background-size: cover;
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
 }
 
 .overlay {

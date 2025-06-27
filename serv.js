@@ -33,12 +33,19 @@ function isAuthenticated(req, res, next) {
 
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
-app.get('/app', isAuthenticated, (req, res) => res.sendFile(path.join(__dirname, 'public', 'app.html')));
 app.get('/api/check-auth', (req, res) => res.json({ authenticated: !!req.session?.username }));
 app.get('/login', (req, res) => req.session?.username ? res.redirect('/app') : res.sendFile(path.join(__dirname, 'public', 'login.html')));
 app.get('/signup', (req, res) => req.session?.username ? res.redirect('/app') : res.sendFile(path.join(__dirname, 'public', 'signup.html')));
 app.get('/forgot', (req, res) => res.sendFile(path.join(__dirname, 'public', 'forgot.html')));
 app.get('/reset', (req, res) => res.sendFile(path.join(__dirname, 'public', 'reset.html')));
+
+app.get('/app', (req, res) => {
+	if (req.session && req.session.username) {
+		res.sendFile(path.join(__dirname, 'public', 'app.html'));
+	} else {
+		res.redirect('/login');
+	}
+});
 
 const pool = new Pool({
 	connectionString: process.env.DATABASE_URL,
@@ -453,7 +460,7 @@ wss.on('connection', async ws => {
 			lastSeenBy: discussion.lastSeenBy,
 			usersInConv
 		});
-		
+
 		for (const m of discussion.recentMessages) {
 			if (!m.readBy.includes(username)) {
 				m.readBy.push(username);

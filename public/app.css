@@ -26,11 +26,12 @@
 	--color-btn-text: #fff;
 	--color-input-bg: #fff;
 	--color-input-text: #222;
-	--color-date-separator-bg: #e3e8f0;
+	--color-date-separator-bg: #f8f8f8;
 	--color-date-separator-text: #333;
 	--conv-btn-bg: #f5f5f5;
   	--conv-btn-hover: #e0e0e0;
-	--conv_btn-color: black;
+	--conv-btn-color: black;
+	--back-btn-color: #333;
 }
 
 
@@ -65,16 +66,16 @@
 		--color-date-separator-bg: #23272a;
 		--color-date-separator-text: #fff;
 		--conv-btn-bg: #0a0a0a;
-    	--conv-btn-hover: #1f1f1f;
-		--conv_btn-color: white;
+		--conv-btn-hover: #1f1f1f;
+		--conv-btn-color: white;
+		--back-btn-color: #ccc;
 	}
 }
 
 body {
 	margin: 0;
 	font-family: Arial, sans-serif;
-	height: 100vh;
-	height: 100dvh;
+	height: auto;
 	overflow: hidden;
 	background: var(--color-bg);
 	color: var(--color-text);
@@ -83,8 +84,8 @@ body {
 #container {
 	display: flex;
 	width: 100vw;
-	height: 100vh;
-	height: 100dvh;
+	min-height: 100dvh;
+	height: auto;
 	background: var(--color-bg);
 }
 
@@ -94,8 +95,7 @@ body {
 	border-right: 1px solid var(--color-border);
 	display: flex;
 	flex-direction: column;
-	height: 100vh;
-	height: 100dvh;
+	height: auto;
 	min-width: 220px;
 }
 
@@ -226,32 +226,26 @@ body {
 	color: #fff;
 }
 
-/* Amélioration contraste .date-separator */
-.date-separator {
-	color: #222;
-	background: #e3e8f0;
-	border: 1px solid #b0b0b0;
-}
 
 /* Amélioration contraste #messageInput */
 #messageInput {
-    flex: 1;
-    padding: 8px;
-    font-size: 1em;
-    border-radius: 6px;
-    background: var(--color-input-bg);
-    color: var(--color-input-text);
-    border: 1.5px solid var(--color-primary);
+	flex: 1;
+	padding: 8px;
+	font-size: 1em;
+	border-radius: 6px;
+	background: var(--color-input-bg);
+	color: var(--color-input-text);
+	border: 1.5px solid var(--color-primary);
 	margin-right: 8px;
 }
 
 #messageInput:focus {
-    outline: 2px solid var(--color-primary);
-    color: var(--color-input-text);
+	outline: 2px solid var(--color-primary);
+	color: var(--color-input-text);
 }
 
 #messageInput::placeholder {
-    color: var(--color-text-muted);
+	color: var(--color-text-muted);
 }
 
 
@@ -416,12 +410,14 @@ body {
 }
 
 .date-separator {
+	color: var(--color-date-separator-text);
+	background: var(--color-date-separator-bg);
+	border: 1px solid var(--color-border);
+
 	text-align: center;
 	margin: 18px 0 10px 0;
 	font-size: 0.98em;
-	color: var(--color-text-light);
 	font-weight: 500;
-	background: rgba(255,255,255,0.8);
 	border-radius: 12px;
 	padding: 3px 16px;
 	display: inline-block;
@@ -476,23 +472,18 @@ body {
 		font-size: 1.3em;
 		background: none;
 		border: none;
-		color: #333;
+		color: var(--back-btn-color);
 		cursor: pointer;
 	}
+
+	svg path {
+		stroke: var(--back-btn-color);
+	}
+
 	.message-bubble {
 		max-width: 90%;
 		font-size: 0.98rem;
 		padding: 8px 10px 5px 10px;
-		background: var(--color-bubble-other);
-		color: var(--color-bubble-other-text);
-	}
-	.message-bubble.me {
-		background: var(--color-bubble-me);
-		color: var(--color-bubble-me-text);
-	}
-	.date-separator {
-		color: var(--color-text-light);
-		background: rgba(255,255,255,0.8);
 	}
 }
 

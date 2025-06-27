@@ -671,52 +671,69 @@ wss.on('connection', async ws => {
 		
 	}
 
-	async function on_typing(data) {
+	function on_typing(data) {
 		const username = getUsername();
 		const convId = data.convId;
 		const discussion = discussions.find(d => d.id === convId && d.users.includes(username));
-		if (!discussion || discussion.users.includes(username)) return;
+		if (!discussion) return;
 
-		if (!discussion.typingUsers.includes(username)) {
-			discussion.typingUsers.push(username);
-		}
-
-		// Notify other users
-		discussion.users.forEach(u => {
-			if (u !== username && !discussion.users.includes(u)) {
-				const ref = userSockets.get(u);
-				if (ref && ref.socket.readyState === WebSocket.OPEN) {
-					ref.socket.send(JSON.stringify({
-						type: 'typing',
-						convId,
-						users: [...discussion.typingUsers]
-					}));
-				}
-			}
-		});
-	}
-
-	async function on_stopTyping(data) {
-		const username = getUsername();
-		const convId = data.convId;
-		const discussion = discussions.find(d => d.id === convId && d.users.includes(username));
-		if (!discussion || discussion.users.includes(username)) return;
-		discussion.typingUsers = discussion.typingUsers.filter(u => u !== username);
+		console.log("in", discussion.typingUsers);
+		if (discussion.typingUsers.includes(username))
+			return;
 		
+		discussion.typingUsers.push(username);
+
+		console.log("IN", discussion);
+
 		// Notify other users
-		discussion.users.forEach(u => {
-			if (u !== username) {
-				const ref = userSockets.get(u);
-				if (ref && ref.socket.readyState === WebSocket.OPEN) {
-					ref.socket.send(JSON.stringify({
-						type: 'typing',
-						convId,
-						users: [...discussion.typingUsers]
-					}));
-				}
+		for (let u of discussion.users) {
+			if (u === username)
+				continue;
+
+
+			const ref = userSockets.get(u);
+			if (ref && ref.listenFor === convId && ref.socket.readyState === WebSocket.OPEN) {
+				ref.socket.send(JSON.stringify({
+					type: 'typing',
+					convId,
+					users: [...discussion.typingUsers]
+				}));
 			}
-		});
+		}
 	}
+
+	function on_stopTyping(data) {
+		const username = getUsername();
+		const convId = data.convId;
+		const discussion = discussions.find(d => d.id === convId && d.users.includes(username));
+		if (!discussion)
+			return;
+
+		const index = discussion.typingUsers.indexOf(username);
+		if (index === -1)
+			return;
+		
+		
+		console.log("ot", discussion.typingUsers);
+
+		discussion.typingUsers.splice(index, 1);
+
+		console.log("OT", discussion);
+
+		for (let u of discussion.users) {
+			if (u === username) continue;
+
+			const ref = userSockets.get(u);
+			if (ref && ref.listenFor === convId && ref.socket.readyState === WebSocket.OPEN) {
+				ref.socket.send(JSON.stringify({
+					type: 'typing',
+					convId,
+					users: [...discussion.typingUsers]
+				}));
+			}
+		}
+	}
+
 
 
 	async function on_block(data) {
@@ -799,11 +816,11 @@ wss.on('connection', async ws => {
 				break;
 			
 			case 'typing':
-				await on_typing(data);
+				on_typing(data);
 				break;
 
 			case 'stopTyping':
-				await on_stopTyping(data);
+				on_stopTyping(data);
 				break;
 			
 			case 'block':

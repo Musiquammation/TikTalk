@@ -150,6 +150,7 @@ function renderConversations() {
 			conv.missedMessages = 0;
 			selectConversation(conv.id);
 		};
+
 		conversationsDiv.appendChild(div);
 	});
 }
@@ -340,6 +341,8 @@ function selectConversation(convId) {
 		sendBtn.disabled = false;
 	}
 
+	updateMuteBtn(); // <-- Add this line
+
 	const userdata = getUserdata();
 	ws.send(JSON.stringify({
 		type: 'getLatestMessages',
@@ -487,12 +490,18 @@ async function addMessage(data) {
 }
 
 function startConv(data) {
+	if (searchAnimInterval) clearInterval(searchAnimInterval);
+	searchingAnim.classList.add('hidden');
+	searchBtn.classList.remove('hidden');
+	searchDots.textContent = '';
+
 	const otherUsers = data.users.filter(u => u !== getUserdata().username);
 	const conv = {
 		id: data.id,
 		title: otherUsers.join(', '),
 		votable: false
 	};
+	
 	conversations.push(conv);
 	renderConvHeader();
 	renderMessages();
@@ -673,11 +682,133 @@ function reportResult(data) {
 
 
 
+
+// Handle mobile notifications
+if ('serviceWorker' in navigator) {
+	navigator.serviceWorker.register('/sw.js').then(() => {
+		console.log('Service Worker registered');
+	});
+
+	navigator.serviceWorker.addEventListener('message', event => {
+		if (!event.data)
+			return;
+		
+		if (event.data.type === 'notification-click') {
+			const convId = event.data.data.convId;
+			if (!convId)
+				return;
+
+			const index = conversations.findIndex(u => u.id === convId);
+			if (index < 0)
+				return;
+
+			conversationsDiv.children[index].click();
+			
+		}
+	});
+}
+
+// Add mute/unmute button references
+const muteBtn = document.getElementById('muteBtn');
+const unmuteBtn = document.getElementById('unmuteBtn');
+
+// --- Muted conversations persistent storage ---
+let mutedConvs = [];
+
+async function loadMutedConvs() {
+	const db = await openDB();
+	return new Promise((resolve, reject) => {
+		const tx = db.transaction("conversations", "readonly");
+		const store = tx.objectStore("conversations");
+		const req = store.get("mutedConvs");
+		req.onsuccess = () => {
+			db.close();
+			if (req.result && Array.isArray(req.result.list)) {
+				mutedConvs = req.result.list;
+				resolve(mutedConvs);
+			} else {
+				mutedConvs = [];
+				resolve([]);
+			}
+		};
+		req.onerror = () => {
+			db.close();
+			mutedConvs = [];
+			resolve([]);
+		};
+	});
+}
+
+async function saveMutedConvs() {
+	const db = await openDB();
+	return new Promise((resolve, reject) => {
+		const tx = db.transaction("conversations", "readwrite");
+		const store = tx.objectStore("conversations");
+		store.put({ id: "mutedConvs", list: mutedConvs });
+		tx.oncomplete = () => { db.close(); resolve(); };
+		tx.onerror = () => { db.close(); reject(); };
+	});
+}
+
+// Update mute/unmute button logic
+muteBtn.addEventListener('click', async () => {
+	if (!selectedConvId) return;
+	if (!mutedConvs.includes(selectedConvId)) {
+		mutedConvs.push(selectedConvId);
+		await saveMutedConvs();
+	}
+	updateMuteBtn();
+});
+
+unmuteBtn.addEventListener('click', async () => {
+	if (!selectedConvId) return;
+	mutedConvs = mutedConvs.filter(id => id !== selectedConvId);
+	await saveMutedConvs();
+	updateMuteBtn();
+});
+
+function updateMuteBtn() {
+	if (!selectedConvId) {
+		muteBtn.classList.add('hidden');
+		unmuteBtn.classList.add('hidden');
+		return;
+	}
+	if (mutedConvs.includes(selectedConvId)) {
+		muteBtn.classList.add('hidden');
+		unmuteBtn.classList.remove('hidden');
+	} else {
+		muteBtn.classList.remove('hidden');
+		unmuteBtn.classList.add('hidden');
+	}
+}
+
+// Remove mute from conv in startConv
+function startConv(data) {
+	if (searchAnimInterval) clearInterval(searchAnimInterval);
+	searchingAnim.classList.add('hidden');
+	searchBtn.classList.remove('hidden');
+	searchDots.textContent = '';
+
+	const otherUsers = data.users.filter(u => u !== getUserdata().username);
+	const conv = {
+		id: data.id,
+		title: otherUsers.join(', '),
+		votable: false
+	};
+	
+	conversations.push(conv);
+	renderConvHeader();
+	renderMessages();
+	selectConversation(data.id);
+}
+
+// Use mutedConvs in notifyMessage
 function notifyMessage(data) {
-	// Incrémente missedMessages pour la conversation concernée
-	const conv = conversations.find(c => c.id === data.convId);
+	const convId = data.convId;
+	const conv = conversations.find(c => c.id === convId);
 	if (!conv)
 		return;
+
 
 	if (!conv.missedMessages) conv.missedMessages = 0;
 	conv.missedMessages += 1;
@@ -699,20 +830,27 @@ function notifyMessage(data) {
 		}
 	}
 
+	if (mutedConvs.includes(convId))
+		return;
+
 
 	// Send notification
 	(Notification.permission === 'granted'
 		? Promise.resolve('granted')
 		: Notification.requestPermission()
 	).then(p => {
-		if (p !== 'granted')
-			return;
-		
-		new Notification('Tiktalk — New message', {
-			body: `${conv.title} sent you a message`,	
+		if (p !== 'granted') return;
+
+		navigator.serviceWorker.getRegistration().then(reg => {
+			if (reg) {
+				reg.showNotification('Tiktalk — New message', {
+					body: `${conv.title} sent you a message`,
+					data: { url: '/app', convId },
+					tag: 'notif-message'
+				});
+			}
 		});
 	});
-
 }
 
 ws.onmessage = (event) => {
@@ -735,11 +873,6 @@ ws.onmessage = (event) => {
 			break;
 
 		case 'startConv':
-			// Arrêter l'animation de recherche et réafficher le bouton search
-			if (searchAnimInterval) clearInterval(searchAnimInterval);
-			searchingAnim.classList.add('hidden');
-			searchBtn.classList.remove('hidden');
-			searchDots.textContent = '';
 			startConv(data);
 			break;
 
@@ -905,9 +1038,11 @@ document.getElementById('main').onclick = () => {
 
 
 // --- Initial state on load ---
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+	await loadMutedConvs();
 	updateBackBtn();
 	updateUsernameDisplay();
+	updateMuteBtn();
 });
 
 // Disconnect user
@@ -932,3 +1067,16 @@ function adjustMainHeight() {
 
 window.visualViewport?.addEventListener("resize", adjustMainHeight);
 window.addEventListener("load", adjustMainHeight);
+
+
+
+// Exit tab (enable notifications)
+document.addEventListener('visibilitychange', () => {
+	if (document.visibilityState === 'hidden') {
+		ws.send(JSON.stringify({ type: 'getLatestMessages', convId: null }));
+	} else if (document.visibilityState === 'visible') {
+		ws.send(JSON.stringify({ type: 'getLatestMessages', convId: selectedConvId }));
+	}
+});
+
+

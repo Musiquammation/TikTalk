@@ -430,6 +430,10 @@ wss.on('connection', async ws => {
 		const { convId } = data;
 		const username = getUsername();
 		setListenFor(username, convId);
+
+		if (!convId)
+			return;
+
 		const discussion = discussions.find(d => d.id === convId && d.users.includes(username));
 		if (!discussion) return;
 		const unreadMessages = discussion.recentMessages.filter(m => !m.readBy.includes(username));
@@ -437,6 +441,7 @@ wss.on('connection', async ws => {
 			const ref = userSockets.get(u);
 			return ref && ref.listenFor === convId;
 		});
+
 		send({
 			type: 'missedMessages',
 			convId,
@@ -448,11 +453,14 @@ wss.on('connection', async ws => {
 			lastSeenBy: discussion.lastSeenBy,
 			usersInConv
 		});
+		
 		for (const m of discussion.recentMessages) {
 			if (!m.readBy.includes(username)) {
 				m.readBy.push(username);
 			}
 		}
+
+
 		discussion.users.forEach(u => {
 			if (u !== username) {
 				const ref = userSockets.get(u);

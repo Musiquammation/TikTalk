@@ -267,6 +267,8 @@ class Discussion {
 
 		this.firstUnreadMessage = Array(users.length).fill(null);
 		this.firstUnnotifiedMessage = Array(users.length).fill(null);
+
+		this.readingFlags = new Int8Array(users.length)
 	}
 
 	markNotified(userIndex) {
@@ -594,7 +596,6 @@ async function getUserSession(sessionToken) {
 	userSessions.set(sessionToken, session);
 	return session;
 }
-
 
 
 
@@ -1016,7 +1017,8 @@ wss.on('connection', async ws => {
 				send({
 					type: 'missedMessages',
 					list: [],
-					seenMark: -1
+					seenMark: -1,
+					readingFlags: null
 				});
 				return;
 			}
@@ -1051,7 +1053,8 @@ wss.on('connection', async ws => {
 			send({
 				type: 'missedMessages',
 				list,
-				seenMark
+				seenMark,
+				readingFlags: discussion.readingFlags
 			});
 
 			const sendObject = JSON.stringify({

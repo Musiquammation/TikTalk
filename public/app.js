@@ -34,6 +34,7 @@ let currentContact = null;
 let currentDiscussionBlockLevel = -1;
 let isAppendingPreviousDiscussionBlock = false;
 let currentLastDate = null;
+let readingFlags = null;
 
 
 class UserProperties {
@@ -616,8 +617,10 @@ async function showDiscussion(contact, contactId, discussionClickDiv) {
 
 	
 
-	// Empty content
+	// Reset content
 	BODY.messages.innerHTML = "";
+	readingFlags = new Int8Array(contact.users.length);
+	updateReadingFlags();
 
 
 	// Show two first message blocks
@@ -844,6 +847,7 @@ function updateSeenMark(mark) {
 }
 
 
+
 async function setSearchPool(searchPool) {
 	const properties = await database.getUserProperties();
 	properties.searchPool = searchPool;
@@ -876,6 +880,34 @@ function stopSearchingAnim() {
 	BODY.searchDots.textContent = '';
 	BODY.searchBtn.classList.remove('hidden');
 }
+
+
+
+let updateReadingFlagsInterval = 0;
+
+function updateReadingFlags() {
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1033,7 +1065,7 @@ const onmessage = {
 
 	async msgNotif(data) {
 		const number = await database.increaseNotifNumber(data.key);
-		
+
 		if (number > 0) {
 			const contactDiv = contactDivs.get(data.key);
 
@@ -1057,6 +1089,11 @@ const onmessage = {
 			appendMessages(data.list);
 
 		updateSeenMark(data.seenMark);
+
+		if (data.missedMessages) {
+			readingFlags = data.missedMessages;
+			updateReadingFlags();
+		}
 	},
 
 	updateSeen(data) {

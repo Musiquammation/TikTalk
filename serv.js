@@ -63,6 +63,10 @@ const pool = new Pool({
 	`).catch(err => console.error(err));
 
 	await pool.query(`
+		DROP TABLE IF EXISTS tiktalk_tokensFCM;
+	`).catch(err => console.error(err));
+
+	await pool.query(`
 		CREATE TABLE IF NOT EXISTS tiktalk_tokensFCM (
 			username VARCHAR(255) NOT NULL,
 			token VARCHAR(255) NOT NULL,
@@ -529,7 +533,7 @@ async function notifyFCM(username, title, body, data) {
 				token,
 				notification: { title, body },
 				data: Object.fromEntries(
-					Object.entries({value: 42}).map(([k, v]) => [k, typeof v === 'string' ? v : JSON.stringify(v)])
+					Object.entries(data).map(([k, v]) => [k, typeof v === 'string' ? v : JSON.stringify(v)])
 				),
 				android: { priority: 'high' }
 			});
@@ -802,7 +806,7 @@ app.get('/api/version', (req, res) => {
 app.post('/api/registerFCM', async (req, res) => {
 	const userSession = await getUserSession(req.body.sessionToken);
 	if (!userSession) {
-		res.json({invalidSessionError: true});
+		res.json({ok: false});
 		return;
 	}
 	

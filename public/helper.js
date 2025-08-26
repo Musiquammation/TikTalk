@@ -61,7 +61,7 @@ if (usingCapacitor) {
 			await goFetch(
 				'/api/registerFCM',
 				{
-					token,
+					token: token.value,
 					sessionToken: localStorage.getItem('sessionToken')
 				},
 				"POST"

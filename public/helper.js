@@ -1,6 +1,6 @@
 const usingCapacitor = !!window.Capacitor;
 
-const DOMAIN = "https://localhost:8080";
+const DOMAIN = "https://tiktalk-production.up.railway.app";
 
 function gotoPage(page) {
 	if (usingCapacitor) {

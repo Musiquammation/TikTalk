@@ -68,16 +68,6 @@ const pendingMessages = new Map();
 /** @type Map<string, ContactDiv> */
 const contactDivs = new Map();
 
-const searchPoolDescriptors = new Map([
-	["default", new SearchPoolDescriptor(
-`Basic. You only meet users with account`
-	)],
-
-	["everyone", new SearchPoolDescriptor(
-`Accessible to every user, including users without an account.
-Could be less safe, but useful when user search is too long for you.`
-	)]
-]);
 
 
 function setNotifBadge(div, number) {
@@ -1147,12 +1137,10 @@ BODY.searchBtn.onclick = async () => {
 BODY.disconnectBtn.onclick = async () => {
 	localStorage.removeItem(CURRENT_USERNAME_KEY);
 
-	const res = await goFetch("/api/logout", {}, "POST");
-
-	const data = await res.json();
+	const data = await goFetch("/api/logout", {}, "POST");
 
 	if (res.ok && data.success) {
-		window.location.href = '/';
+		gotoPage("");
 	}
 };
 

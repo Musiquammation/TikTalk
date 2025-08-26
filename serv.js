@@ -9,7 +9,6 @@ const nodemailer = require('nodemailer');
 const crypto = require('crypto');
 const admin = require('firebase-admin');
 const cors = require('cors');
-const serviceAccount = require('./serviceAccountKey.json'); 
 require('dotenv').config();
 
 const app = express();
@@ -37,7 +36,9 @@ app.use(cors({
 
 
 admin.initializeApp({
-	credential: admin.credential.cert(serviceAccount),
+	credential: admin.credential.cert(
+		JSON.parse(process.env.SERVICE_ACCOUNT_KEY)
+	),
 });
 
 

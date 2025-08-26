@@ -1,0 +1,32 @@
+{
+  "name": "tiktalk",
+  "version": "1.0.0",
+  "main": "serv.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/cli": "^7.4.3",
+    "@capacitor/core": "^7.4.3",
+    "@ionic/core": "^8.7.3",
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "express-session": "^1.18.1",
+    "firebase-admin": "^13.4.0",
+    "nodemailer": "^7.0.3",
+    "pg": "^8.16.2",
+    "ws": "^8.18.2"
+  },
+  "devDependencies": {
+    "@react-native-community/cli": "^20.0.1",
+    "@react-native-community/cli-platform-android": "^20.0.1",
+    "@react-native-community/cli-platform-ios": "^20.0.1"
+  }
+}

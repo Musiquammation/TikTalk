@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>TikTalk - Sign Up</title>
+	<link rel="stylesheet" href="/login.css">
+</head>
+<body>
+	<form id="signupForm">
+		<h2>Create an account</h2>
+		<input type="text" name="username" placeholder="Username" required />
+		<input type="email" name="email" placeholder="Email" required />
+		<input type="password" name="password" placeholder="Password" required />
+		<button type="submit">Sign Up</button>
+		<span>Already have an account?</span> <a href="/login.html">Log in</a><br>
+		<p id="error" style="color:red; display: none;"></p>
+	</form>
+
+	
+	<script src="/helper.js"></script>
+
+	<script>
+		document.getElementById('signupForm').onsubmit = async function(e) {
+			e.preventDefault();
+			const username = this.username.value;
+			const email = this.email.value;
+			const password = this.password.value;
+			const data = await goFetch('/api/signup', { username, email, password }, "POST");
+
+			if (data.success) {
+				gotoPage('app');
+
+			} else {
+				const el = document.getElementById('error');
+				el.textContent = data.message || 'Login failed';
+				el.style.display = 'block';
+			}
+		};
+	</script>
+</body>
+</html>

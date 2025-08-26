@@ -519,8 +519,9 @@ function unregisterFCM(username, token) {
 }
 
 async function notifyFCM(username, title, body, data) {
+	console.log("Notify", username);
 	const notif = await getNotifFCM(username);
-	console.log(username, notif.tokens);
+	console.log("Tokens are:", username, notif.tokens);
 
 	await Promise.all(notif.tokens.map(async token => {
 		try {

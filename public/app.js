@@ -7,7 +7,7 @@ const ws = (() => {
 		url = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`
 	}
 
-	new WebSocket(url);
+	return new WebSocket(url);
 })();
 
 const CURRENT_USERNAME_KEY = 'currentUsername';
@@ -881,6 +881,7 @@ function stopSearchingAnim() {
 
 // Connect web socket
 ws.onopen = async () => {
+	alert("open");
 	const sessionToken = localStorage.getItem('sessionToken');
 
 	let username;

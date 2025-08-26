@@ -31,7 +31,7 @@ app.use(cors({
 		const allowedOrigins = [
 			process.env.DOMAIN,
 			"capacitor://localhost",
-			"http://localhost:8100"   // dev web
+			"https://localhost"   // dev web
     	];
     	
 		if (!origin || allowedOrigins.includes(origin)) {

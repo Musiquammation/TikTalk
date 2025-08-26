@@ -539,6 +539,7 @@ async function startSearch(poolName, couldown = 1800000) {
 }
 
 const BODY = {
+	sidebar: document.getElementById('sidebar'),
 	conversations: document.getElementById('conversations'),
 	messages: document.getElementById('messages'),
 	messageInput: document.getElementById('messageInput'),
@@ -550,6 +551,7 @@ const BODY = {
 	disconnectBtn: document.getElementById('disconnectBtn'),
 	searchingAnim: document.getElementById('searchingAnim'),
 	searchDots: document.getElementById('searchDots'),
+	backBtn: document.getElementById('backBtn'),
 }
 
 
@@ -594,8 +596,10 @@ function appendDiscussion(contact, contactId) {
 	contactDivs.set(contact.key, new ContactDiv(div))
 
 	// Handle click
-	div.onclick = () => {
+	div.onclick = e => {
+		e.stopPropagation();
 		showDiscussion(contact, contactId, div);
+		hideMobileSidebar();
 	}
 
 	BODY.conversations.appendChild(div);
@@ -881,7 +885,6 @@ function stopSearchingAnim() {
 
 // Connect web socket
 ws.onopen = async () => {
-	alert("open");
 	const sessionToken = localStorage.getItem('sessionToken');
 
 	let username;
@@ -918,7 +921,7 @@ ws.onopen = async () => {
 
 	// Register username
 	__username__ = username;
-	document.getElementById("usernameDisplay").textContent = username;
+	document.getElementById('usernameDisplay').textContent = username;
 	database = new Database(username, anonymous);
 	appendDiscussionList(await database.getContactMap());
 
@@ -927,6 +930,8 @@ ws.onopen = async () => {
 	for (let [_, contact] of (await database.getContactMap())) {
 		contacts.push({key: contact.key, users: contact.users});
 	}
+
+	showMobileSidebar();
 
 	send({
 		type: 'connect',
@@ -1141,6 +1146,38 @@ async function sendMessage(content) {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function showMobileSidebar() {
+	BODY.sidebar.classList.add('mobile-visible');
+}
+
+function hideMobileSidebar() {
+	BODY.sidebar.classList.remove('mobile-visible');
+}
+
+function isMobileSidebarVisible() {
+	return BODY.sidebar.classList.contains('mobile-visible');
+}
+
+
+
 BODY.messages.onscroll = () => {
 	const scrollTop = BODY.messages.scrollTop;
 	const scrollThreshold = 0.2 * (BODY.messages.scrollHeight - BODY.messages.clientHeight);
@@ -1181,9 +1218,19 @@ BODY.disconnectBtn.onclick = async () => {
 };
 
 
-document.getElementById("settingsBtn").onclick = () => {
+document.getElementById('settingsBtn').onclick = () => {
 	gotoPage('settings');
 };
+
+document.getElementById('backBtn').onclick = () => {
+	showMobileSidebar();
+};
+
+document.addEventListener("click", (e) => {
+	if (e.target !== BODY.backBtn && !BODY.sidebar.contains(e.target)) {
+		hideMobileSidebar();
+	}
+});
 
 
 
@@ -1219,7 +1266,7 @@ function openCurrentDB() {
 	const username = localStorage.getItem(CURRENT_USERNAME_KEY);
 	
 	if (username) {
-		document.getElementById("usernameDisplay").textContent = username;
+		document.getElementById('usernameDisplay').textContent = username;
 	
 		const subDatabase = new Database(username, false);
 		const contactMap = await subDatabase.getContactMap();
@@ -1230,6 +1277,7 @@ function openCurrentDB() {
 	
 		appendDiscussionList(contactMap);
 		database = subDatabase;
+		showMobileSidebar();
 	}
 })();
 

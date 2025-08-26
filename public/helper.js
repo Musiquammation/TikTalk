@@ -56,9 +56,7 @@ async function goFetch(url, data, method="GET") {
 if (usingCapacitor) {
 	const { PushNotifications } = Capacitor.Plugins;
 	
-
 	PushNotifications.addListener('registration', async token => {
-		
 		try {
 			await goFetch(
 				'/api/registerFCM',

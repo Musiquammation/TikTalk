@@ -528,7 +528,9 @@ async function notifyFCM(username, title, body, data) {
 			await admin.messaging().send({
 				token,
 				notification: { title, body },
-				data,
+				data: Object.fromEntries(
+					Object.entries({value: 42}).map(([k, v]) => [k, typeof v === 'string' ? v : JSON.stringify(v)])
+				),
 				android: { priority: 'high' }
 			});
 		} catch (err) {
@@ -538,7 +540,6 @@ async function notifyFCM(username, title, body, data) {
 				console.error('FCM error for token', token, err);
 			}
 		}
-
 	}));
 }
 

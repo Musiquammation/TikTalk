@@ -878,7 +878,7 @@ ws.onopen = async () => {
 		anonymous = false;
 		localStorage.setItem(CURRENT_USERNAME_KEY, username);
 	} else {
-		const response = await goFetch('/api/createAnonymousAccount');
+		const object = await goFetch('/api/createAnonymousAccount');
 		username = object.username;
 		key = object.key;
 		anonymous = true;

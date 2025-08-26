@@ -25,14 +25,25 @@ const sessionParser = session({
 app.use(sessionParser);
 app.use(express.json());
 
+
 app.use(cors({
-	origin: [
-		process.env.DOMAIN,
-		"https://localhost"
-	],
+	origin: (origin, callback) => {
+		const allowedOrigins = [
+			process.env.DOMAIN,
+			"capacitor://localhost",
+			"http://localhost:8100"   // dev web
+    	];
+    	
+		if (!origin || allowedOrigins.includes(origin)) {
+			callback(null, true);
+		} else {
+			callback(new Error("Not allowed by CORS"));
+		}
+	},
 
 	credentials: true
 }));
+
 
 
 admin.initializeApp({

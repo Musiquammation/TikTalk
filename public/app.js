@@ -36,7 +36,6 @@ let isAppendingPreviousDiscussionBlock = false;
 let currentLastDate = null;
 
 
-
 class UserProperties {
 	constructor(anonymous) {
 		this.searchPool = anonymous ? null : "default";
@@ -661,8 +660,8 @@ async function showDiscussion(contact, contactId, discussionClickDiv) {
 		type: 'listenFor',
 		key: contact.key
 	});
-
 }
+
 
 function appendDiscussionBlock(messages, lastDate, container, users, pending = false) {
 	let generatedIds;
@@ -992,6 +991,7 @@ const onmessage = {
 
 	async meet(data) {
 		stopSearchingAnim();
+		hideMobileSidebar();
 		requireDatabase();
 
 		if (!__username__) {
@@ -1006,6 +1006,7 @@ const onmessage = {
 		
 		usernames[usernameIndex] = null;
 		
+		// Check for already existing discussion
 		{
 			const {contact, id} = database.findContactByUsernames(usernames);
 			if (contact > 0) {
@@ -1032,9 +1033,13 @@ const onmessage = {
 
 	async msgNotif(data) {
 		const number = await database.increaseNotifNumber(data.key);
+		
 		if (number > 0) {
 			const contactDiv = contactDivs.get(data.key);
-			contactDiv?.setNotifNumber(number);
+
+			if (data.key !== currentContact?.key) {
+				contactDiv?.setNotifNumber(number);
+			}
 			
 			// Move the conversation to the top
 			if (contactDiv?.div) {
@@ -1052,7 +1057,6 @@ const onmessage = {
 			appendMessages(data.list);
 
 		updateSeenMark(data.seenMark);
-		
 	},
 
 	updateSeen(data) {
@@ -1146,6 +1150,43 @@ async function sendMessage(content) {
 
 
 
+function onAppResume() {
+	console.log("app resumed");
+
+	if (currentContact) {
+		send({
+			type: 'listenFor',
+			key: currentContact.key
+		});
+	}
+}
+
+function onAppPause() {
+	console.log("app paused");
+
+	if (currentContact) {
+		send({
+			type: 'listenFor',
+			key: null
+		});
+	}
+}
+
+
+
+if (usingCapacitor) {
+	const { App } = Capacitor.Plugins;
+
+	App.addListener('resume', onAppResume);
+	App.addListener('pause', onAppPause);
+
+} else {
+	window.addEventListener('focus', onAppResume);
+	window.addEventListener('blur', onAppPause);
+}
+
+
+
 
 
 
@@ -1214,7 +1255,7 @@ BODY.disconnectBtn.onclick = async () => {
 	);
 	
 	localStorage.removeItem('sessionToken');
-	gotoPage("");
+	gotoPage('index');
 };
 
 

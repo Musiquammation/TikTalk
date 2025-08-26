@@ -123,8 +123,7 @@ async function getUserScore(username) {
 
 
 function generateRandomKey() {
-	const buffer = crypto.randomBytes(8);
-	return String.fromCharCode(...buffer);
+	return crypto.randomBytes(8).toString('hex');
 }
 
 
@@ -135,6 +134,34 @@ function compareKeys(a, b) {
 function generateResetCode() {
 	return Math.floor(100000 + Math.random() * 900000).toString(); // 6 digits
 }
+
+
+/**
+ * Generate a 64-bit FNV-1a hash from an array of strings.
+ * Returns a 16-character hex string.
+ */
+function hashStrings64(arr) {
+	if (!Array.isArray(arr)) {
+		throw new TypeError('Expected an array of strings');
+	}
+
+	const items = arr.map(s => (s == null ? '' : String(s)).trim());
+
+	const joined = items.join('\u0000'); // null separator
+
+	// FNV-1a 64-bit constants
+	let h = BigInt('0xcbf29ce484222325'); // offset basis
+	const fnvPrime = BigInt('0x100000001b3');
+
+	for (let i = 0; i < joined.length; i++) {
+		h ^= BigInt(joined.charCodeAt(i));
+		h = (h * fnvPrime) & BigInt('0xFFFFFFFFFFFFFFFF'); // 64-bit mask
+	}
+
+	// Return as 16-character hex
+	return h.toString(16).padStart(16, '0');
+}
+
 
 
 
@@ -427,7 +454,7 @@ const notifsFCM = new Map();
 function joinClients(clients) {
 	// Create a DiscussionCache
 	const usernames = clients.map(client => client.username);
-	const key = generateRandomKey();
+	const key = hashStrings64(usernames);
 	const cache = new DiscussionCache(usernames);
 	cache.connectedUsers = clients.length; // all of the users are connected
 	
@@ -973,10 +1000,15 @@ wss.on('connection', async ws => {
 		listenFor(data) {
 			// Update listenFor
 			const key = data.key;
+			
+			if (key === null) {
+				socketRef.listenFor = null;
+				return;
+			}
+			
 			socketRef.listenFor = key;
 
 			//  # Send missed messages #
-			
 			const discussion = discussions.get(key);
 			if (!discussion) {
 				// No missed messages (so all have been read)

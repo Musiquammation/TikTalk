@@ -16,34 +16,22 @@ const server = http.createServer(app);
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-const sessionParser = session({
+app.use(session({
 	secret: process.env.SESSION_SECRET,
 	resave: false,
-	saveUninitialized: false,
-	cookie: { secure: false }
-});
-app.use(sessionParser);
+	saveUninitialized: true,
+	cookie: {
+		secure: true,
+		sameSite: 'none' 
+	}
+}));
 app.use(express.json());
 
 
 app.use(cors({
-	origin: (origin, callback) => {
-		const allowedOrigins = [
-			process.env.DOMAIN,
-			"capacitor://localhost",
-			"https://localhost"   // dev web
-    	];
-    	
-		if (!origin || allowedOrigins.includes(origin)) {
-			callback(null, true);
-		} else {
-			callback(new Error("Not allowed by CORS"));
-		}
-	},
-
-	credentials: true
+  origin: true,
+  credentials: true,
 }));
-
 
 
 admin.initializeApp({

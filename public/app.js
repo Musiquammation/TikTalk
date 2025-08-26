@@ -1,4 +1,14 @@
-const ws = new WebSocket(`${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`);
+const ws = (() => {
+	let url;
+	
+	if (usingCapacitor) {
+		url = `${DOMAIN_SECURE ? 'wss' : 'ws'}://${DOMAIN}/ws`
+	} else {
+		url = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`
+	}
+
+	new WebSocket(url);
+})();
 
 const CURRENT_USERNAME_KEY = 'currentUsername';
 

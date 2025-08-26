@@ -1,6 +1,7 @@
 const usingCapacitor = !!window.Capacitor;
 
-const DOMAIN = "https://tiktalk-production.up.railway.app";
+const DOMAIN_SECURE = true;
+const DOMAIN = "tiktalk-production.up.railway.app";
 
 function gotoPage(page) {
 	if (usingCapacitor) {
@@ -23,7 +24,9 @@ async function goFetch(url, data, method="GET") {
 		options.body = JSON.stringify(data);
 	}
 
-	const fetchUrl = usingCapacitor ? `${DOMAIN}${url}` : url;
+	const fetchUrl = usingCapacitor
+		? `${DOMAIN_SECURE ? 'https' : 'http'}://${DOMAIN}${url}`
+		: url;
 
 	try {
 		console.log(fetchUrl);

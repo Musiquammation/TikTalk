@@ -451,7 +451,7 @@ function joinClients(clients) {
 
 
 async function getNotifFCM(username) {
-	let notif = notifsFCM.get(token);
+	let notif = notifsFCM.get(username);
 	if (notif) {
 		notif.updateNotifTimeout();
 		return notif;

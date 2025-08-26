@@ -22,7 +22,7 @@ app.use(session({
 	saveUninitialized: false,
 	cookie: {
 		secure: false,
-		// sameSite: 'none' 
+		sameSite: 'none' 
 	}
 }));
 app.use(express.json());
@@ -662,8 +662,6 @@ app.post('/api/reset-password', async (req, res) => {
 
 
 app.get('/api/connectSocket', (req, res) => {
-	console.log(req.session);
-	
 	const username = req.session?.username;
 
 	if (!username) {

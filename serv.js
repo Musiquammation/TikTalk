@@ -375,11 +375,11 @@ class NotifFCM {
 
 		// Clear memory
 		this.timeout = setTimeout(() => {
-			const index = notifsFCM.indexOf(this);
-			if (index >= 0) {
-				notifsFCM.splice(index, 1);
+			for (const [key, value] of userSessions) {
+				if (value === this) {
+					userSessions.delete(key);
+				}
 			}
-
 		}, NotifFCM.LIFETIME);
 	}
 }
@@ -518,6 +518,7 @@ function unregisterFCM(username, token) {
 
 async function notifyFCM(username, title, body, data) {
 	const notif = await getNotifFCM(username);
+	console.log(username, notif.tokens);
 
 	await Promise.all(notif.tokens.map(async token => {
 		try {
@@ -1088,12 +1089,12 @@ wss.on('connection', async ws => {
 
 
 			for (let index = 0; index < users.length; index++) {
-				const user = users[index];
+				const username = users[index];
 
 				if (index === position)
 					continue;
 				
-				const ref = userSockets.get(user);
+				const ref = userSockets.get(username);
 
 				// Client directly listening for message (then content is sent)
 				if (ref && compareKeys(ref.listenFor, listenFor)) {

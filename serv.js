@@ -14,25 +14,24 @@ require('dotenv').config();
 const app = express();
 const server = http.createServer(app);
 
-app.use(express.static(path.join(__dirname, 'public')));
-
-app.use(session({
-	secret: process.env.SESSION_SECRET,
-	resave: false,
-	saveUninitialized: false,
-	cookie: {
-		secure: false,
-		sameSite: 'none' 
-	}
-}));
-app.use(express.json());
-
-
 app.use(cors({
   origin: true,
   credentials: true,
 }));
 
+
+app.use(express.json());
+
+
+app.use(session({
+  secret: process.env.SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: false,
+    sameSite: 'none'
+  }
+}));
 
 admin.initializeApp({
 	credential: admin.credential.cert(
@@ -40,6 +39,7 @@ admin.initializeApp({
 	),
 });
 
+app.use(express.static(path.join(__dirname, 'public')));
 
 // HTML routes
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));

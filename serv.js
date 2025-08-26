@@ -662,6 +662,8 @@ app.post('/api/reset-password', async (req, res) => {
 
 
 app.get('/api/connectSocket', (req, res) => {
+	console.log(req.session);
+
 	const username = req.session?.username;
 
 	if (!username) {

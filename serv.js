@@ -33,6 +33,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // HTML routes
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+app.get('/index', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 app.get('/login', (req, res) => res.sendFile(path.join(__dirname, 'public', 'login.html')));
 app.get('/signup', (req, res) => res.sendFile(path.join(__dirname, 'public', 'signup.html')));
 app.get('/forgot', (req, res) => res.sendFile(path.join(__dirname, 'public', 'forgot.html')));
@@ -519,9 +520,8 @@ function unregisterFCM(username, token) {
 }
 
 async function notifyFCM(username, title, body, data) {
-	console.log("Notify", username);
 	const notif = await getNotifFCM(username);
-	console.log("Tokens are:", username, notif.tokens);
+	console.log("Notify", username, notif.tokens);
 
 	await Promise.all(notif.tokens.map(async token => {
 		try {
@@ -653,7 +653,7 @@ app.post('/api/login', async (req, res) => {
 
 app.post('/api/logout', (req, res) => {
 	deleteUserSessionToken(req.body.sessionToken);
-	res.sendStatus(200);
+	res.json({ok: true});
 
 });
 
@@ -809,7 +809,7 @@ app.post('/api/registerFCM', async (req, res) => {
 	const notif = await getNotifFCM(userSession.username);
 
 	if (notif.tokens.includes(token)) {
-		res.sendStatus(200);
+		res.json({ok: true});
 		return;
 	}
 
@@ -821,6 +821,7 @@ app.post('/api/registerFCM', async (req, res) => {
 	);
 
 	notif.tokens.push(token);
+	res.json({ok: true});
 });
 
 
@@ -1031,15 +1032,22 @@ wss.on('connection', async ws => {
 
 			// Collect missed messages
 			const list = [];
-			for (let i = 0; i < discussion.messages.length; i++) {
-				const msg = discussion.messages[i];
-				
-				list.push({
-					content: msg.content,
-					by: msg.authorIndex,
-					date: msg.date
-				});
+			const firstUnreadMessage = discussion.firstUnreadMessage[userIndex];
+			
+			if (firstUnreadMessage) {
+				for (let i = 0; i < discussion.messages.length; i++) {
+					const msg = discussion.messages[i];
+					if (msg === firstUnreadMessage)
+						break;
+					
+					list.push({
+						content: msg.content,
+						by: msg.authorIndex,
+						date: msg.date
+					});
+				}
 			}
+
 
 			// Remove messages read by eveyrone
 			let seenMark;

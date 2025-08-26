@@ -1090,6 +1090,7 @@ const onmessage = {
 
 		updateSeenMark(data.seenMark);
 
+		
 		if (data.missedMessages) {
 			readingFlags = data.missedMessages;
 			updateReadingFlags();
@@ -1362,21 +1363,4 @@ function openCurrentDB() {
 
 
 
-
-// Handle notifications
-window.handleNotifRegistration = async token => {
-	try {
-		await goFetch(
-			'/api/registerFCM',
-			{
-				token,
-				sessionToken: localStorage.getItem('sessionToken')
-			},
-			"POST"
-		);
-
-	} catch (err) {
-		console.error('Error sending FCM token to server', err);
-	}
-};
 

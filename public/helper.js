@@ -58,22 +58,21 @@ if (usingCapacitor) {
 	
 
 	PushNotifications.addListener('registration', async token => {
-		// localStorage.setItem('tokenFCM', token.value);		
-		if (window.handleNotifRegistration) {
-			window.handleNotifRegistration(token.value);
-		}	
-	});
-			
-	/*
-	async function ensureToken() {
-		if (!localStorage.getItem('tokenFCM')) {
-			const perm = await PushNotifications.requestPermissions();
-			if (perm.receive === 'granted') {
-				await PushNotifications.register();
-			}
+		
+		try {
+			await goFetch(
+				'/api/registerFCM',
+				{
+					token,
+					sessionToken: localStorage.getItem('sessionToken')
+				},
+				"POST"
+			);
+
+		} catch (err) {
+			console.error('Error sending FCM token to server', err);
 		}
-	}*/
-	
+	});	
 	
 	
 	async function ensureToken() {

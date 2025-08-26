@@ -31,7 +31,15 @@ async function goFetch(url, data, method="GET") {
 		if (!res.ok) {
 			throw new Error(`HTTP error! status: ${res.status}`);
 		}
-		return await res.json(); // retourne le JSON du serveur
+		
+		const data = await res.json(); // retourne le JSON du serveur
+
+		if (data.invalidSessionError) {
+			alert("You are not connected");
+			gotoPage('login');
+		}
+
+		return data;
 	
 	} catch (err) {
 		console.error("Fetch error:", err);

@@ -1,6 +1,5 @@
 const express = require('express');
 const path = require('path');
-const session = require('express-session');
 const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const http = require('http');
@@ -15,23 +14,14 @@ const app = express();
 const server = http.createServer(app);
 
 app.use(cors({
-  origin: true,
-  credentials: true,
+	origin: true,
+  	credentials: true,
 }));
 
 
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-
-app.use(session({
-  secret: process.env.SESSION_SECRET,
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: true,
-    sameSite: 'none'
-  }
-}));
 
 admin.initializeApp({
 	credential: admin.credential.cert(
@@ -81,8 +71,22 @@ const pool = new Pool({
 	`).catch(err => console.error(err));
 
 	await pool.query(`
+		CREATE TABLE IF NOT EXISTS tiktalk_tokensSES (
+			username VARCHAR(255) NOT NULL,
+			token VARCHAR(255) UNIQUE NOT NULL,
+			PRIMARY KEY (token, username),
+			FOREIGN KEY (username) REFERENCES tiktalk_users(username) ON DELETE CASCADE
+		);
+	`).catch(err => console.error(err));
+
+	await pool.query(`
 		CREATE INDEX IF NOT EXISTS tiktalk_idx_tokensFCM 
 		ON tiktalk_tokensFCM(username);
+	`).catch(err => console.error(err));
+
+	await pool.query(`
+		CREATE INDEX IF NOT EXISTS tiktalk_idx_tokensSES 
+		ON tiktalk_tokensSES(username);
 	`).catch(err => console.error(err));
 })();
 
@@ -90,12 +94,6 @@ const pool = new Pool({
 
 
 
-function isAuthenticated(req, res, next) {
-	if (req.session && req.session.username) {
-		return next();
-	}
-	res.status(401).json({ authenticated: false });
-}
 
 function isAnonymousUsername(username) {
 	return username.startsWith(process.env.ANONYMOUS_PREFIX);
@@ -310,6 +308,31 @@ class DiscussionCache {
 }
 
 
+class UserSession {
+	static LIFETIME = 10 * 360000; // 10mn
+
+	constructor(username) {
+		this.username = username;
+		this.timeout = -1;
+	}
+
+	update() {
+		if (this.timeout >= 0) {
+			clearTimeout(this.timeout);
+		}
+
+		// Clear memory
+		this.timeout = setTimeout(() => {
+			for (const [key, value] of userSessions) {
+				if (value === this) {
+					userSessions.delete(key);
+				}
+			}
+		}, UserSession.LIFETIME);
+	}
+}
+
+
 class NotifFCM {
 	static LIFETIME = 300 * 1000; // 5mn
 
@@ -337,10 +360,6 @@ class NotifFCM {
 
 
 
-
-
-
-
 class SocketConnectionTicket {
 	constructor(username) {
 		this.username = username;
@@ -353,6 +372,10 @@ class SocketConnectionTicket {
 		}, 1800000); // 30mn
 	}
 }
+
+
+
+
 
 
 
@@ -381,9 +404,11 @@ const discussions = new Map();
 /** @type Map<string, DiscussionCache> */
 const discussionCaches = new Map();
 
+/** @type Map<string, UserSession> */
+const userSessions = new Map();
+
 /** @type Map<string, NotifFCM> */
 const notifsFCM = new Map();
-
 
 
 
@@ -489,6 +514,65 @@ async function notifyFCM(username, title, body, data) {
 
 
 
+
+function generateUserSessionToken(username) {
+	const sessionToken = generateRandomKey();
+	const session = new UserSession(username);
+	userSessions.set(sessionToken, session);
+
+	pool.query(`INSERT INTO tiktalk_tokensSES (username, token) VALUES ($1, $2);`,
+		[username, sessionToken]
+	);
+
+	return sessionToken;
+}
+
+function deleteUserSessionToken(sessionToken) {
+	if (!sessionToken)
+		return;
+
+	const s = userSessions.get(sessionToken);
+	clearTimeout(s.timeout);
+	userSessions.delete(sessionToken);
+
+
+	pool.query(`DELETE FROM tiktalk_tokensSES WHERE token=$1;`,
+		[sessionToken]
+	);
+}
+
+async function getUserSession(sessionToken) {
+	if (!sessionToken)
+		return null;
+
+	let session = userSessions.get(sessionToken);
+	if (session) {
+		session.update();
+		return session;
+	}
+	
+	// Search already existing session
+	const results = await pool.query(
+		`SELECT username FROM tiktalk_tokensSES WHERE token = $1;`,
+		[sessionToken]
+	);
+
+	if (results.rows.length === 0) {
+		return null;
+	}
+
+	session = new UserSession(results.rows[0].username);
+	session.update();
+	userSessions.set(sessionToken, session);
+	return session;
+}
+
+
+
+
+
+
+
 app.post('/api/signup', async (req, res) => {
 	const { username, email, password } = req.body;
 	if (!username || !email || !password) {
@@ -501,15 +585,17 @@ app.post('/api/signup', async (req, res) => {
 
 	try {
 		const hash = await bcrypt.hash(password, 10);
-		const result = await pool.query(
+		await pool.query(
 			'INSERT INTO tiktalk_users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id',
 			[username, email, hash]
 		);
-		req.session.username = username;
-		res.json({ success: true });
+		
+		const sessionToken = generateUserSessionToken(username);
+		res.json({ sessionToken  });
+
 	} catch (err) {
 		if (err.code === '23505') res.json({ success: false, message: 'Username or email exists.' });
-		else res.json({ success: false, message: 'Signup failed.' });
+		else res.json({ sessionToken: null, message: 'Signup failed.' });
 	}
 });
 
@@ -522,26 +608,23 @@ app.post('/api/login', async (req, res) => {
 			'SELECT password_hash FROM tiktalk_users WHERE username = $1',
 			[username]
 		);
+
 		if (result.rows.length === 1 && await bcrypt.compare(password, result.rows[0].password_hash)) {
-			req.session.username = username;
-			res.json({ success: true });
+			const sessionToken = generateUserSessionToken(username);
+			res.json({ sessionToken });
+
 		} else {
-			res.json({ success: false, message: 'Invalid credentials' });
+			res.json({ sessionToken: null, message: 'Invalid credentials' });
 		}
 	} catch (err) {
-		res.json({ success: false, message: 'Login error' });
+		res.json({ sessionToken: null, message: 'Login error' });
 	}
 });
 
 app.post('/api/logout', (req, res) => {
-	req.session.destroy(err => {
-		if (err) {
-			return res.status(500).json({ success: false, message: 'Logout failed' });
-		}
-		
-		res.clearCookie('connect.sid');
-		res.json({ success: true });
-	});
+	deleteUserSessionToken(req.body.sessionToken);
+	res.sendStatus(200);
+
 });
 
 
@@ -661,19 +744,17 @@ app.post('/api/reset-password', async (req, res) => {
 });
 
 
-app.get('/api/connectSocket', (req, res) => {
-	console.log(req.session);
-
-	const username = req.session?.username;
-
-	if (!username) {
+app.post('/api/connectSocket', async (req, res) => {
+	const userSession = await getUserSession(req.body.sessionToken);
+	if (!userSession) {
 		res.json({username: undefined});
 		return;
 	}
 
-	const ticket = new SocketConnectionTicket(username);
+	
+	const ticket = new SocketConnectionTicket(userSession.username);
 	socketConnectionTickets.push(ticket);
-	res.json({username, key: ticket.key});
+	res.json({username: userSession.username, key: ticket.key});
 });
 
 app.get('/api/createAnonymousAccount', (req, res) => {
@@ -687,16 +768,15 @@ app.get('/api/version', (req, res) => {
 	res.json({version: process.env.TIKTALK_VERSION});
 });
 
-app.post('/api/registerFCM', isAuthenticated, async (req, res) => {
-	const username = req.session?.username;
-	
-	if (!username) {
-		res.sendStatus(403);
+app.post('/api/registerFCM', async (req, res) => {
+	const userSession = await getUserSession(req.body.sessionToken);
+	if (!userSession) {
+		res.json({invalidSessionError: true});
 		return;
 	}
 	
 	const token = req.body.token;
-	const notif = await getNotifFCM(username);
+	const notif = await getNotifFCM(userSession.username);
 
 	if (notif.tokens.includes(token)) {
 		res.sendStatus(200);
@@ -707,14 +787,18 @@ app.post('/api/registerFCM', isAuthenticated, async (req, res) => {
 	// Add token to sql table
 	await pool.query(
 		`INSERT INTO tiktalk_tokensFCM (username, token) VALUES ($1, $2);`,
-		[username, token]
+		[userSession.username, token]
 	);
 
 	notif.tokens.push(token);
 });
 
 
-app.get('/api/checkAuth', (req, res) => res.json({ authenticated: !!req.session?.username }));
+app.post('/api/checkAuth', async (req, res) => {
+	res.json({
+		authenticated: (await getUserSession(req.body.sessionToken)) !== null
+	})
+});
 
 app.get('/api/collectPoolNames', (req, res) => {
 	res.json({

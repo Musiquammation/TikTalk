@@ -871,12 +871,31 @@ function stopSearchingAnim() {
 
 // Connect web socket
 ws.onopen = async () => {
-	let {username, key} = await goFetch('/api/connectSocket');
+	const sessionToken = localStorage.getItem('sessionToken');
+
+	let username;
+	let key;
 	let anonymous;
 
-	if (username) {
+	if (sessionToken) {
+		const object = await goFetch(
+			'/api/connectSocket',
+			{sessionToken},
+			"POST"
+		);
+
+		username = object.username;
+		if (!username) {
+			alert("You are not connected");
+			localStorage.removeItem('sessionToken');
+			gotoPage('login');
+			return;
+		}
+
 		anonymous = false;
+		key = object.key;
 		localStorage.setItem(CURRENT_USERNAME_KEY, username);
+
 	} else {
 		const object = await goFetch('/api/createAnonymousAccount');
 		username = object.username;
@@ -956,7 +975,9 @@ const onmessage = {
 	},
 
 	async meet(data) {
+		stopSearchingAnim();
 		requireDatabase();
+
 		if (!__username__) {
 			throw new Error("Client username required");
 		}
@@ -1136,12 +1157,16 @@ BODY.searchBtn.onclick = async () => {
 
 BODY.disconnectBtn.onclick = async () => {
 	localStorage.removeItem(CURRENT_USERNAME_KEY);
-
-	const data = await goFetch("/api/logout", {}, "POST");
-
-	if (res.ok && data.success) {
-		gotoPage("");
-	}
+	
+		
+	await goFetch(
+		"/api/logout",
+		{sessionToken: localStorage.getItem('sessionToken')},
+		"POST"
+	);
+	
+	localStorage.removeItem('sessionToken');
+	gotoPage("");
 };
 
 
@@ -1204,7 +1229,15 @@ function openCurrentDB() {
 // Handle notifications
 window.handleNotifRegistration = async token => {
 	try {
-		await goFetch('/api/registerFCM', {token}, "POST");
+		await goFetch(
+			'/api/registerFCM',
+			{
+				token,
+				sessionToken: localStorage.getItem('sessionToken')
+			},
+			"POST"
+		);
+
 	} catch (err) {
 		console.error('Error sending FCM token to server', err);
 	}

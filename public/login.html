@@ -31,9 +31,11 @@
 				"POST"
 			);
 
-			if (data.success) {
+			if (data.sessionToken) {
+				localStorage.setItem('sessionToken', data.sessionToken);
 				gotoPage('app');
 			} else {
+				localStorage.removeItem('sessionToken');
 				const el = document.getElementById('error');
 				el.textContent = data.message || 'Login failed';
 				el.style.display = 'block';

@@ -29,6 +29,14 @@ admin.initializeApp({
 	),
 });
 
+const transporter = nodemailer.createTransport({
+	service: 'gmail',
+	auth: {
+		user: process.env.MAILER_USER,
+		pass: process.env.MAILER_PASS
+	}
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // HTML routes
@@ -444,8 +452,12 @@ const userSessions = new Map();
 /** @type Map<string, NotifFCM> */
 const notifsFCM = new Map();
 
+/** @type Map<string, { code, expires, timeout, userId }> */
+const resetCodes = new Map();
 
-
+function generateResetCode() {
+	return Math.floor(100000 + Math.random() * 900000).toString(); // 6 digits
+}
 
 
 
@@ -679,8 +691,17 @@ app.post('/api/login', async (req, res) => {
 app.post('/api/logout', (req, res) => {
 	deleteUserSessionToken(req.body.sessionToken);
 	res.json({ok: true});
-
 });
+
+
+
+
+
+
+
+
+
+
 
 
 // Route to request password reset
@@ -797,6 +818,17 @@ app.post('/api/reset-password', async (req, res) => {
 		res.json({ success: false, message: 'Server error' });
 	}
 });
+
+
+
+
+
+
+
+
+
+
+
 
 
 app.post('/api/connectSocket', async (req, res) => {
@@ -1088,12 +1120,12 @@ wss.on('connection', async ws => {
 				seenMark = discussion.getSeenMark();
 			}
 
-			// Send missed messages
+
 			send({
 				type: 'missedMessages',
 				list,
 				seenMark,
-				writingFlags: discussion.writingFlags
+				writingFlags: discussion.writingFlags.map(v => v ? "1" : "0").join("")
 			});
 
 			const sendObject = JSON.stringify({

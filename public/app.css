@@ -457,7 +457,12 @@ body {
 
 
 .pending {
-	color: gray;
+	color: var(--color-text-muted);
+}
+
+#isTyping {
+	color: var(--color-text-muted);
+	font-style: italic;
 }
 
 

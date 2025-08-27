@@ -525,6 +525,7 @@ const BODY = {
 	searchingAnim: document.getElementById('searchingAnim'),
 	searchDots: document.getElementById('searchDots'),
 	backBtn: document.getElementById('backBtn'),
+	isTyping: document.getElementById('isTyping'),
 }
 
 
@@ -861,10 +862,54 @@ function stopSearchingAnim() {
 
 
 
-let updateReadingFlagsInterval = 0;
+let updateWritingFlagsPointNumber = 0;
+let updateWritingFlagsInterval = 0;
 
 function updateWritingFlags() {
+	clearInterval(updateWritingFlagsInterval);
+	BODY.isTyping.innerHTML = '';
 
+	let nobodyIsWriting;
+
+	if (writingFlags && currentContact) {
+		for (let i of writingFlags) {
+			if (i !== 0) {
+				nobodyIsWriting = true;
+				break;
+			}
+		}
+
+		nobodyIsWriting = false;
+
+	} else {
+		nobodyIsWriting = true;
+	}
+
+	if (nobodyIsWriting) {
+		return;
+	}
+
+	const usernames = [];
+	for (let i = 0; i < currentContact.users.length; i++)
+		if (writingFlags[i] && currentContact.users[i] !== null)
+			usernames.push(currentContact.users[i]);
+		
+	if (usernames)
+	if (usernames.length === 1) {
+		BODY.isTyping.innerHTML = `${usernames[0]} is typing<span id='isTypingAnim'></span>`;
+	} else {
+		BODY.isTyping.innerHTML = `${usernames.join(", ")} are typing<span id='isTypingAnim'></span>`;
+	}
+
+	updateWritingFlagsInterval = setInterval(() => {
+		updateWritingFlagsPointNumber++;
+
+		if (updateWritingFlagsPointNumber >= 4) {
+			updateWritingFlagsPointNumber = 0;
+		}
+
+		document.getElementById("isTypingAnim").innerText = ".".repeat(updateWritingFlagsPointNumber);
+	}, 400);
 }
 
 
@@ -1093,8 +1138,12 @@ const onmessage = {
 		updateSeenMark(data.seenMark);
 
 		
-		if (data.missedMessages) {
-			writingFlags = data.missedMessages;
+		if (data.writingFlags) {
+			const wf = new Int8Array(data.writingFlags.length);
+			for (let i = 0; i < data.writingFlags.length; i++)
+				wf[i] = data.writingFlags[i] === '1' ? 1 : 0;
+
+			writingFlags = wf;
 			updateWritingFlags();
 		}
 	},
@@ -1286,6 +1335,14 @@ BODY.messages.onscroll = () => {
 	}
 };
 
+
+BODY.messageInput.onkeydown = e => {
+	if (e.key === "Enter") {
+        e.preventDefault();
+		sendMessage(BODY.messageInput.value.trim());
+		BODY.messageInput.value = "";
+    }
+}
 
 BODY.sendBtn.onclick = () => {
 	sendMessage(BODY.messageInput.value.trim());

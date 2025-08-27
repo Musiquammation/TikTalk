@@ -833,6 +833,8 @@ app.post('/api/registerFCM', async (req, res) => {
 	const token = req.body.token;
 	const notif = await getNotifFCM(userSession.username);
 
+	console.log(notif);
+
 	if (notif.tokens.includes(token)) {
 		res.json({ok: true});
 		return;

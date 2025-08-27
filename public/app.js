@@ -584,6 +584,10 @@ async function showDiscussion(contact, contactId, discussionClickDiv) {
 	// Mark as seen
 	database.markAsSeen(contactId);
 
+	if (!discussionClickDiv) {
+		discussionClickDiv = contactDivs.get(contact.key).div;
+	}
+
 	if (discussionClickDiv) {
 		resetNotifBadge(discussionClickDiv);
 	}
@@ -873,20 +877,21 @@ async function openKeyDiscussion(key, usernames) {
 		throw new Error("Client username required");
 	}
 
-	// Set null to user position
-	let usernameIndex = usernames.indexOf(__username__);
-	if (usernameIndex >= 0) {
-		usernames[usernameIndex] = null;
-	}
 	
 	
 	// Check for already existing discussion
 	{
 		const {contact, id} = database.findContactByKey(key);
-		if (contact > 0) {
+		if (contact) {
 			showDiscussion(contact, id);
 			return;
 		}
+	}
+
+	// Set null to user position
+	let usernameIndex = usernames.indexOf(__username__);
+	if (usernameIndex >= 0) {
+		usernames[usernameIndex] = null;
 	}
 
 	const {id, contact} = await database.createContact(usernames, key);
@@ -1059,14 +1064,8 @@ const onmessage = {
 			if (localNotifPerm) {
 				const {LocalNotifications} = Capacitor.Plugins;
 
-				let usernames;
-				for (const [_, contact] of database.contacts.entries()) {
-					if (contact.key === key) {
-						usernames = contact.users;
-						break;
-					}
-				}
-
+				const {contact} = database.findContactByKey(key);
+				const usernames = contact.users;
 				const usernameString = usernames.filter(item => typeof item === "string").join(", ");
 
 				await LocalNotifications.schedule({

@@ -78,7 +78,7 @@
 body {
 	margin: 0;
 	font-family: Arial, sans-serif;
-	height: auto;
+	height: 100dvh;
 	overflow: hidden;
 	background: var(--color-bg);
 	color: var(--color-text);
@@ -87,10 +87,10 @@ body {
 #container {
 	display: flex;
 	width: 100vw;
-	min-height: 100dvh;
-	height: auto;
+	height: 100%;
 	background: var(--color-bg);
 }
+
 
 #sidebar {
 	width: 300px;
@@ -193,8 +193,7 @@ body {
 	flex: 1;
 	display: flex;
 	flex-direction: column;
-	height: 100vh; /* if dvh is not supported, let's use vh */
-	height: 100dvh;
+	height: 100%;
 	min-width: 0;
 	background: var(--color-bg);
 }
@@ -203,9 +202,7 @@ body {
 	flex: 1;
 	padding: 16px;
 	overflow-y: auto;
-	height: 0;
 	min-height: 0;
-	background: var(--color-bg);
 }
 
 
@@ -468,6 +465,7 @@ body {
 	#container {
 		flex-direction: column;
 	}
+
 	#sidebar {
 		position: fixed;
 		left: 0;

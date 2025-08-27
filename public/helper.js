@@ -15,7 +15,7 @@ async function goFetch(url, data, method="GET") {
 	const options = {
 		method,
 		headers: {
-	  		"Content-Type": "application/json"
+				"Content-Type": "application/json"
 		},
 		credentials: "include"
 	};
@@ -54,32 +54,50 @@ async function goFetch(url, data, method="GET") {
 
 
 if (usingCapacitor) {
-	const { PushNotifications } = Capacitor.Plugins;
-	
-	PushNotifications.addListener('registration', async token => {
-		try {
-			await goFetch(
-				'/api/registerFCM',
-				{
-					token: token.value,
-					sessionToken: localStorage.getItem('sessionToken')
-				},
-				"POST"
-			);
+	const { FirebaseMessaging, PushNotifications } = Capacitor.Plugins;
 
-		} catch (err) {
-			console.error('Error sending FCM token to server', err);
-		}
-	});	
-	
-	
+	PushNotifications.createChannel({
+		id: "default",
+		name: "Default",
+		description: "Default notification channel",
+		importance: 5, // max
+		visibility: 1, // public
+		sound: "default"
+	});
+
+
 	async function ensureToken() {
+		// Demander la permission (obligatoire sur iOS)
 		const perm = await PushNotifications.requestPermissions();
-		if (perm.receive === 'granted') {
-			await PushNotifications.register();
+		if (perm.receive === "granted") {
+			// Récupérer le token FCM
+			const { token } = await FirebaseMessaging.getToken();
+			console.log("FCM token:", token);
+
+			try {
+				await goFetch(
+					"/api/registerFCM",
+					{
+						token,
+						sessionToken: localStorage.getItem("sessionToken"),
+					},
+					"POST"
+				);
+			} catch (err) {
+				console.error("Error sending token to server", err);
+			}
 		}
 	}
-	
+
+	// Écoute des notifs reçues en foreground
+	FirebaseMessaging.addListener("notificationReceived", (notification) => {
+		console.log("Notification reçue:", notification);
+	});
+
+	// Écoute quand l’utilisateur clique sur une notif
+	FirebaseMessaging.addListener("notificationActionPerformed", (notification) => {
+		console.log("Notification ouverte:", notification);
+	});
+
 	ensureToken();
 }
-

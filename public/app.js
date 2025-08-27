@@ -29,6 +29,7 @@ function compareKeys(a, b) {
 
 let __username__ = null;
 
+let localNotifPerm = false;
 let currentContactId = -1;
 let currentContact = null;
 let currentDiscussionBlockLevel = -1;
@@ -436,41 +437,15 @@ class Database {
 		});
 	}
 
-	findContactByUsernames(usernames) {
+	findContactByKey(key) {
 		const n = usernames.length;
 
 		for (const [id, contact] of this.contacts) {
-			if (contact.users.length !== n) continue;
-
-			if (n === 2) {
-				const [a, b] = contact.users;
-				const [u1, u2] = usernames;
-				if ((a === u1 && b === u2) || (a === u2 && b === u1)) {
-					return {contact, id};
-				}
-			} else if (n <= 4) {
-				let match = true;
-				for (let i = 0; i < n; i++) {
-					if (!contact.users.includes(usernames[i])) {
-						match = false;
-						break;
-					}
-				}
-				if (match) return {contact, id};
-			} else {
-				const usersSet = new Set(contact.users);
-				let match = true;
-				for (let i = 0; i < n; i++) {
-					if (!usersSet.has(usernames[i])) {
-						match = false;
-						break;
-					}
-				}
-				if (match) return {contact, id};
-			}
+			if (contact.key === key)
+				return {id, contact};
 		}
 
-		return -1;
+		return {};
 	}
 
 	async changeMsgDate(contactId, oldDate, newDate) {
@@ -913,7 +888,6 @@ function updateReadingFlags() {
 
 
 
-
 // Connect web socket
 ws.onopen = async () => {
 	const sessionToken = localStorage.getItem('sessionToken');
@@ -971,6 +945,9 @@ ws.onopen = async () => {
 		contacts
 	});
 };
+
+
+
 
 const onmessage = {
 	connect(data) {
@@ -1040,7 +1017,7 @@ const onmessage = {
 		
 		// Check for already existing discussion
 		{
-			const {contact, id} = database.findContactByUsernames(usernames);
+			const {contact, id} = database.findContactByKey(data.key);
 			if (contact > 0) {
 				showDiscussion(contact, id);
 				return;
@@ -1069,13 +1046,29 @@ const onmessage = {
 		if (number > 0) {
 			const contactDiv = contactDivs.get(data.key);
 
-			if (data.key !== currentContact?.key) {
-				contactDiv?.setNotifNumber(number);
-			}
+			contactDiv?.setNotifNumber(number);
 			
 			// Move the conversation to the top
 			if (contactDiv?.div) {
 				BODY.conversations.insertBefore(contactDiv.div, BODY.conversations.firstChild);
+			}
+
+			if (localNotifPerm) {
+				const {LocalNotifications} = Capacitor.Plugins;
+				await LocalNotifications.schedule({
+					notifications: [
+						{
+							title: "New message!",
+							body: contactDiv.div?.div.textContent + " sent you a message",
+							id: 1,
+							schedule: { at: new Date(Date.now() + 1000) }, // dans 1s
+							sound: null,
+							attachments: null,
+							actionTypeId: "",
+							extra: null,
+						}
+					],
+				});
 			}
 		}
 	},
@@ -1213,10 +1206,17 @@ function onAppPause() {
 
 
 if (usingCapacitor) {
-	const { App } = Capacitor.Plugins;
+	const { App, LocalNotifications } = Capacitor.Plugins;
 
 	App.addListener('resume', onAppResume);
 	App.addListener('pause', onAppPause);
+
+	LocalNotifications.requestPermissions().then(perm => {
+		if (perm.display === 'granted') {
+			localNotifPerm = true;
+		}
+	});
+
 
 } else {
 	window.addEventListener('focus', onAppResume);

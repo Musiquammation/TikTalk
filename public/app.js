@@ -1059,7 +1059,14 @@ const onmessage = {
 			if (localNotifPerm) {
 				const {LocalNotifications} = Capacitor.Plugins;
 
-				const usernames = database.contacts.get(key).users;
+				let usernames;
+				for (const [_, contact] of database.contacts.entries()) {
+					if (contact.key === key) {
+						usernames = database.contacts.get(key).users;
+						break;
+					}
+				}
+
 				const usernameString = usernames.filter(item => typeof item === "string").join(", ");
 
 				await LocalNotifications.schedule({
@@ -1125,7 +1132,7 @@ const onmessage = {
 	}
 };
 
-ws.onmessage = event => {
+ws.onmessage = async event => {
 	const data = JSON.parse(event.data);
 	const fn = (onmessage[data.type]);
 	if (!fn) {
@@ -1133,7 +1140,7 @@ ws.onmessage = event => {
 		throw "Type not found";
 	}
 
-	fn(data);
+	await fn(data);
 }
 
 

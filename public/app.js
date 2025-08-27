@@ -1062,7 +1062,7 @@ const onmessage = {
 				let usernames;
 				for (const [_, contact] of database.contacts.entries()) {
 					if (contact.key === key) {
-						usernames = database.contacts.get(key).users;
+						usernames = contact.users;
 						break;
 					}
 				}
@@ -1231,7 +1231,10 @@ if (usingCapacitor) {
 		'localNotificationActionPerformed',
 		notif => {
 			console.log(notif);
-			openKeyDiscussion(notif.extra.key, JSON.parse(notif.extra.usernames));
+			openKeyDiscussion(
+				notif.notification.extra.key,
+				JSON.parse(notif.notification.extra.usernames)
+			);
 		}
 	);
 

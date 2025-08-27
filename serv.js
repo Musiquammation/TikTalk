@@ -1062,18 +1062,20 @@ wss.on('connection', async ws => {
 			const firstUnreadMessage = discussion.firstUnreadMessage[userIndex];
 			
 			if (firstUnreadMessage) {
-				for (let i = 0; i < discussion.messages.length; i++) {
-					const msg = discussion.messages[i];
-					
-					list.push({
-						content: msg.content,
-						by: msg.authorIndex,
-						date: msg.date
-					});
+				let i = discussion.messages.indexOf(firstUnreadMessage);
 
-					if (msg === firstUnreadMessage)
-						break;
+				if (i >= 0) {
+					for (; i < discussion.messages.length; i++) {
+						const msg = discussion.messages[i];
+						
+						list.push({
+							content: msg.content,
+							by: msg.authorIndex,
+							date: msg.date
+						});
+					}
 				}
+
 			}
 
 

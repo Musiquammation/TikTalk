@@ -584,6 +584,10 @@ function deleteUserSessionToken(sessionToken) {
 		return;
 
 	const s = userSessions.get(sessionToken);
+	if (!s) {
+		return;
+	}
+	
 	clearTimeout(s.timeout);
 	userSessions.delete(sessionToken);
 

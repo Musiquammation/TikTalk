@@ -588,6 +588,7 @@ async function showDiscussion(contact, contactId, discussionClickDiv) {
 		resetNotifBadge(discussionClickDiv);
 	}
 
+	BODY.convTitle.innerText = contact.users.filter(u => u !== null).join(", ");
 	
 
 	// Reset content
@@ -1058,13 +1059,12 @@ const onmessage = {
 			if (localNotifPerm) {
 				const {LocalNotifications} = Capacitor.Plugins;
 
-				console.log(data.key);
 
 				await LocalNotifications.schedule({
 					notifications: [
 						{
 							title: "New message!",
-							body: contactDiv.div?.textContent + " sent you a message",
+							body: contactDiv.div?.innerHTML.split("<span")[0] + " sent you a message",
 							id: 1,
 							extra: {key: data.key}
 						}

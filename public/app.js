@@ -588,7 +588,7 @@ async function showDiscussion(contact, contactId, discussionClickDiv) {
 		resetNotifBadge(discussionClickDiv);
 	}
 
-	BODY.convTitle.innerText = contact.users.filter(u => u !== null).join(", ");
+	BODY.convTitle.innerText = contact.users.filter(item => typeof item === "string").join(", ");
 	
 
 	// Reset content
@@ -864,7 +864,7 @@ function updateWritingFlags() {
 }
 
 
-async function openKeyDiscussion(key) {
+async function openKeyDiscussion(key, usernames) {
 	stopSearchingAnim();
 	hideMobileSidebar();
 	requireDatabase();
@@ -873,17 +873,16 @@ async function openKeyDiscussion(key) {
 		throw new Error("Client username required");
 	}
 
-	const usernames = data.usernames;
+	// Set null to user position
 	let usernameIndex = usernames.indexOf(__username__);
-	if (usernameIndex < 0) {
-		throw new Error("Client absent from username list");
+	if (usernameIndex >= 0) {
+		usernames[usernameIndex] = null;
 	}
 	
-	usernames[usernameIndex] = null;
 	
 	// Check for already existing discussion
 	{
-		const {contact, id} = database.findContactByKey(data.key);
+		const {contact, id} = database.findContactByKey(key);
 		if (contact > 0) {
 			showDiscussion(contact, id);
 			return;
@@ -1028,7 +1027,7 @@ const onmessage = {
 	},
 
 	async meet(data) {
-		openKeyDiscussion(data.key);
+		openKeyDiscussion(data.key, data.usernames);
 	},
 
 	message(data) {
@@ -1044,10 +1043,11 @@ const onmessage = {
 	},
 
 	async msgNotif(data) {
-		const number = await database.increaseNotifNumber(data.key);
+		const key = data.key;
+		const number = await database.increaseNotifNumber(key);
 
 		if (number > 0) {
-			const contactDiv = contactDivs.get(data.key);
+			const contactDiv = contactDivs.get(key);
 
 			contactDiv?.setNotifNumber(number);
 			
@@ -1059,14 +1059,16 @@ const onmessage = {
 			if (localNotifPerm) {
 				const {LocalNotifications} = Capacitor.Plugins;
 
+				const usernames = database.contacts.get(key).users;
+				const usernameString = usernames.filter(item => typeof item === "string").join(", ");
 
 				await LocalNotifications.schedule({
 					notifications: [
 						{
 							title: "New message!",
-							body: contactDiv.div?.innerHTML.split("<span")[0] + " sent you a message",
+							body: usernameString + " sent you a message",
 							id: 1,
-							extra: {key: data.key}
+							extra: {key, usernames: JSON.stringify(usernames)}
 						}
 					],
 				});
@@ -1222,7 +1224,7 @@ if (usingCapacitor) {
 		'localNotificationActionPerformed',
 		notif => {
 			console.log(notif);
-			openKeyDiscussion(notif.extra.key);
+			openKeyDiscussion(notif.extra.key, JSON.parse(notif.extra.usernames));
 		}
 	);
 

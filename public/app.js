@@ -438,8 +438,6 @@ class Database {
 	}
 
 	findContactByKey(key) {
-		const n = usernames.length;
-
 		for (const [id, contact] of this.contacts) {
 			if (contact.key === key)
 				return {id, contact};

@@ -35,7 +35,7 @@ let currentContact = null;
 let currentDiscussionBlockLevel = -1;
 let isAppendingPreviousDiscussionBlock = false;
 let currentLastDate = null;
-let readingFlags = null;
+let writingFlags = null;
 
 
 class UserProperties {
@@ -592,8 +592,8 @@ async function showDiscussion(contact, contactId, discussionClickDiv) {
 
 	// Reset content
 	BODY.messages.innerHTML = "";
-	readingFlags = new Int8Array(contact.users.length);
-	updateReadingFlags();
+	writingFlags = new Int8Array(contact.users.length);
+	updateWritingFlags();
 
 
 	// Show two first message blocks
@@ -858,10 +858,40 @@ function stopSearchingAnim() {
 
 let updateReadingFlagsInterval = 0;
 
-function updateReadingFlags() {
+function updateWritingFlags() {
 
 }
 
+
+async function openKeyDiscussion(key) {
+	stopSearchingAnim();
+	hideMobileSidebar();
+	requireDatabase();
+
+	if (!__username__) {
+		throw new Error("Client username required");
+	}
+
+	const usernames = data.usernames;
+	let usernameIndex = usernames.indexOf(__username__);
+	if (usernameIndex < 0) {
+		throw new Error("Client absent from username list");
+	}
+	
+	usernames[usernameIndex] = null;
+	
+	// Check for already existing discussion
+	{
+		const {contact, id} = database.findContactByKey(data.key);
+		if (contact > 0) {
+			showDiscussion(contact, id);
+			return;
+		}
+	}
+
+	const {id, contact} = await database.createContact(usernames, key);
+	showDiscussion(contact, id, appendDiscussion(contact, id));
+}
 
 
 
@@ -997,33 +1027,7 @@ const onmessage = {
 	},
 
 	async meet(data) {
-		stopSearchingAnim();
-		hideMobileSidebar();
-		requireDatabase();
-
-		if (!__username__) {
-			throw new Error("Client username required");
-		}
-
-		const usernames = data.usernames;
-		let usernameIndex = usernames.indexOf(__username__);
-		if (usernameIndex < 0) {
-			throw new Error("Client absent from username list");
-		}
-		
-		usernames[usernameIndex] = null;
-		
-		// Check for already existing discussion
-		{
-			const {contact, id} = database.findContactByKey(data.key);
-			if (contact > 0) {
-				showDiscussion(contact, id);
-				return;
-			}
-		}
-
-		const {id, contact} = await database.createContact(usernames, data.key);
-		showDiscussion(contact, id, appendDiscussion(contact, id));
+		openKeyDiscussion(data.key);
 	},
 
 	message(data) {
@@ -1053,17 +1057,16 @@ const onmessage = {
 
 			if (localNotifPerm) {
 				const {LocalNotifications} = Capacitor.Plugins;
+
+				console.log(data.key);
+
 				await LocalNotifications.schedule({
 					notifications: [
 						{
 							title: "New message!",
-							body: contactDiv.div?.div.textContent + " sent you a message",
+							body: contactDiv.div?.textContent + " sent you a message",
 							id: 1,
-							schedule: { at: new Date(Date.now() + 1000) }, // dans 1s
-							sound: null,
-							attachments: null,
-							actionTypeId: "",
-							extra: null,
+							extra: {key: data.key}
 						}
 					],
 				});
@@ -1083,8 +1086,8 @@ const onmessage = {
 
 		
 		if (data.missedMessages) {
-			readingFlags = data.missedMessages;
-			updateReadingFlags();
+			writingFlags = data.missedMessages;
+			updateWritingFlags();
 		}
 	},
 
@@ -1214,6 +1217,14 @@ if (usingCapacitor) {
 			localNotifPerm = true;
 		}
 	});
+
+	LocalNotifications.addListener(
+		'localNotificationActionPerformed',
+		notif => {
+			console.log(notif);
+			openKeyDiscussion(notif.extra.key);
+		}
+	);
 
 
 } else {

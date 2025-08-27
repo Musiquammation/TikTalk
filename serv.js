@@ -587,7 +587,7 @@ function deleteUserSessionToken(sessionToken) {
 	if (!s) {
 		return;
 	}
-	
+
 	clearTimeout(s.timeout);
 	userSessions.delete(sessionToken);
 
@@ -1062,14 +1062,15 @@ wss.on('connection', async ws => {
 			if (firstUnreadMessage) {
 				for (let i = 0; i < discussion.messages.length; i++) {
 					const msg = discussion.messages[i];
-					if (msg === firstUnreadMessage)
-						break;
 					
 					list.push({
 						content: msg.content,
 						by: msg.authorIndex,
 						date: msg.date
 					});
+
+					if (msg === firstUnreadMessage)
+						break;
 				}
 			}
 

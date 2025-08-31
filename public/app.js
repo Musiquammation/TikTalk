@@ -29,7 +29,6 @@ function compareKeys(a, b) {
 
 let __username__ = null;
 
-let localNotifPerm = false;
 let currentContactId = -1;
 let currentContact = null;
 let currentDiscussionBlockLevel = -1;
@@ -939,6 +938,10 @@ async function openKeyDiscussion(key, usernames) {
 		usernames[usernameIndex] = null;
 	}
 
+	if (!usernames) {
+		throw new Error("Username list is null");
+	}
+
 	const {id, contact} = await database.createContact(usernames, key);
 	showDiscussion(contact, id, appendDiscussion(contact, id));
 }
@@ -1014,8 +1017,20 @@ ws.onopen = async () => {
 		contacts.push({key: contact.key, users: contact.users});
 	}
 
+	// Open notification
+	const convToOpenStorage = "convToOpenAs_" + username;
+	const convToOpen = localStorage.getItem(convToOpenStorage);
+	if (convToOpen) {
+		localStorage.removeItem(convToOpenStorage);
+		openKeyDiscussion(convToOpen, null);
+	}
+
+
+
+	// Show
 	showMobileSidebar();
 
+	// Connect websocket
 	send({
 		type: 'connect',
 		username,
@@ -1124,7 +1139,9 @@ const onmessage = {
 				BODY.conversations.insertBefore(contactDiv.div, BODY.conversations.firstChild);
 			}
 
-			if (localNotifPerm) {
+			try {
+				await askLocalNotifPerm();
+
 				const {LocalNotifications} = Capacitor.Plugins;
 
 				const {contact} = database.findContactByKey(key);
@@ -1141,7 +1158,8 @@ const onmessage = {
 						}
 					],
 				});
-			}
+				
+			} catch (e) {}
 		}
 	},
 
@@ -1287,22 +1305,19 @@ if (usingCapacitor) {
 	App.addListener('resume', onAppResume);
 	App.addListener('pause', onAppPause);
 
-	LocalNotifications.requestPermissions().then(perm => {
-		if (perm.display === 'granted') {
-			localNotifPerm = true;
-		}
-	});
 
-	LocalNotifications.addListener(
-		'localNotificationActionPerformed',
-		notif => {
-			console.log(notif);
-			openKeyDiscussion(
-				notif.notification.extra.key,
-				JSON.parse(notif.notification.extra.usernames)
-			);
-		}
-	);
+	askLocalNotifPerm().then(() => {
+		LocalNotifications.addListener(
+			'localNotificationActionPerformed',
+			notif => {
+				console.log(notif);
+				openKeyDiscussion(
+					notif.notification.extra.key,
+					JSON.parse(notif.notification.extra.usernames)
+				);
+			}
+		);
+	});
 
 
 } else {
@@ -1454,6 +1469,7 @@ function openCurrentDB() {
 		showMobileSidebar();
 	}
 })();
+
 
 
 

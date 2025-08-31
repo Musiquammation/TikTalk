@@ -52,9 +52,11 @@ async function goFetch(url, data, method="GET") {
 
 
 
+let localNotifPerm = -1;
+let askLocalNotifPerm;
 
 if (usingCapacitor) {
-	const { FirebaseMessaging, PushNotifications } = Capacitor.Plugins;
+	const { FirebaseMessaging, PushNotifications, LocalNotifications } = Capacitor.Plugins;
 
 	PushNotifications.createChannel({
 		id: "default",
@@ -79,7 +81,7 @@ if (usingCapacitor) {
 					"/api/registerFCM",
 					{
 						token,
-						sessionToken: localStorage.getItem("sessionToken"),
+						sessionToken: localStorage.getItem('sessionToken'),
 					},
 					"POST"
 				);
@@ -89,15 +91,85 @@ if (usingCapacitor) {
 		}
 	}
 
+
+	askLocalNotifPerm = function() {
+		return new Promise((resolve, reject) => {
+			if (localNotifPerm === 0) {
+				reject();
+				return;
+			}
+			
+			if (localNotifPerm === 1) {
+				resolve();
+				return;
+			}
+
+			LocalNotifications.requestPermissions().then(perm => {
+				if (perm.display === 'granted') {
+					localNotifPerm = 1;
+					resolve();
+				} else {
+					localNotifPerm = 1;
+					reject();
+				}
+			});
+		});
+	}
+
 	// Écoute des notifs reçues en foreground
-	FirebaseMessaging.addListener("notificationReceived", (notification) => {
-		console.log("Notification reçue:", notification);
+	FirebaseMessaging.addListener("notificationReceived", async notification => {
+		try {
+			await askLocalNotifPerm();
+			const notif = notification.notification;
+
+			await LocalNotifications.schedule({
+				notifications: [
+					{
+						title: notif.title,
+						body: notif.body,
+						id: 1,
+						extra: notif.data
+					}
+				],
+			});
+
+		} catch (e) {}
+
+		console.log("Notification recue:", notification);
 	});
 
 	// Écoute quand l’utilisateur clique sur une notif
-	FirebaseMessaging.addListener("notificationActionPerformed", (notification) => {
-		console.log("Notification ouverte:", notification);
+	FirebaseMessaging.addListener("notificationActionPerformed", notification => {
+		const data = notification.notification.data;
+		localStorage.setItem("convToOpenAs_" + data.data.username, data.data.conv);
 	});
 
+
+
+	if (!IN_APP_PAGE) {
+		LocalNotifications.addListener(
+			'localNotificationActionPerformed',
+			notif => {
+				localStorage.setItem(
+					"convToOpenAs_" + data.data.username,
+					notif.notification.extra.key
+				);
+
+				gotoPage('app');
+			}
+		);
+	}
+
+
 	ensureToken();
+
+
+} else {
+	askLocalNotifPerm = function() {
+		return new Promise((resolve, reject) => {
+			reject();
+		});
+	}
 }
+
+

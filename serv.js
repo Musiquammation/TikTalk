@@ -65,6 +65,7 @@ const pool = new Pool({
 			email VARCHAR(255) UNIQUE NOT NULL,
 			password_hash VARCHAR(255) NOT NULL,
 			score FLOAT DEFAULT 3,
+			money INT DEFAULT 0,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			ban BIGINT DEFAULT 0
 		);
@@ -1322,9 +1323,63 @@ setInterval(() => {
 		if (discussion.expireDate <= now)
 			discussions.delete(id);
 		
-	
 }, 3600000); 
 
+
+
+
+// Notify everyone daily
+function scheduleRush() {
+	const now = new Date();
+
+	// Timezone offset for Paris (in minutes)
+	const parisOffset = -new Date().toLocaleString("en-US", { timeZone: "Europe/Paris" }).split(" ")[1];
+
+	// Today in Paris timezone
+	const parisNow = new Date(
+		now.toLocaleString("en-US", { timeZone: "Europe/Paris" })
+	);
+
+	// min bound: today 10:00 Paris time
+	const min = new Date(parisNow);
+	min.setHours(10, 0, 0, 0);
+
+	// max bound: today 20:00 Paris time
+	const max = new Date(parisNow);
+	max.setHours(20, 0, 0, 0);
+
+	if (parisNow > max) {
+		min.setDate(min.getDate() + 1);
+		max.setDate(max.getDate() + 1);
+	}
+
+	const diff = max.getTime() - min.getTime();
+	const randomOffset = Math.floor(Math.random() * diff);
+
+	const execTimeParis = new Date(min.getTime() + randomOffset);
+	const delay = execTimeParis.getTime() - parisNow.getTime();
+
+	console.log("Next execution (Paris time):", execTimeParis.toString());
+
+	setTimeout(async () => {
+		scheduleRush();
+
+		const users = await pool.query(
+			"SELECT username FROM tiktalk_users;"
+		);
+
+		for (let row of users.rows) {
+			notifyFCM(
+				row.username,
+				"Everyone’s online",
+				"Everyone got this notification! Log in now to instantly meet someone.",
+				{rush: true}
+			)
+		}
+	}, delay);
+}
+
+scheduleRush();
 
 
 const PORT = process.env.PORT;

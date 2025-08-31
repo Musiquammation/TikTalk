@@ -3,6 +3,8 @@ const usingCapacitor = !!window.Capacitor;
 const DOMAIN_SECURE = true;
 const DOMAIN = "tiktalk-production.up.railway.app";
 
+
+
 function gotoPage(page) {
 	if (usingCapacitor) {
 		window.location.href = "/" + page + ".html";
@@ -141,24 +143,33 @@ if (usingCapacitor) {
 	// Écoute quand l’utilisateur clique sur une notif
 	FirebaseMessaging.addListener("notificationActionPerformed", notification => {
 		const data = notification.notification.data;
-		localStorage.setItem("convToOpenAs_" + data.data.username, data.data.conv);
+		if (data.username && data.conv) {
+			localStorage.setItem("convToOpenAs_" + data.username, data.conv);
+			return;
+		}
+
+		if (data.rush) {
+			gotoPage('app');
+			return;
+		}
 	});
 
 
 
-	if (!IN_APP_PAGE) {
+	if (!window.inAppPage) {
 		LocalNotifications.addListener(
 			'localNotificationActionPerformed',
 			notif => {
 				localStorage.setItem(
-					"convToOpenAs_" + data.data.username,
-					notif.notification.extra.key
+					"convToOpenAs_" + notif.notification.extra.username,
+					notif.notification.extra.conv
 				);
 
 				gotoPage('app');
 			}
 		);
 	}
+
 
 
 	ensureToken();

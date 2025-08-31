@@ -1023,12 +1023,13 @@ ws.onopen = async () => {
 	if (convToOpen) {
 		localStorage.removeItem(convToOpenStorage);
 		openKeyDiscussion(convToOpen, null);
+	} else {
+		// Show
+		showMobileSidebar();
 	}
 
 
 
-	// Show
-	showMobileSidebar();
 
 	// Connect websocket
 	send({
@@ -1310,10 +1311,10 @@ if (usingCapacitor) {
 		LocalNotifications.addListener(
 			'localNotificationActionPerformed',
 			notif => {
-				console.log(notif);
+				const data = notif.notification.extra;
 				openKeyDiscussion(
-					notif.notification.extra.key,
-					JSON.parse(notif.notification.extra.usernames)
+					data.key,
+					JSON.parse(data.usernames)
 				);
 			}
 		);
@@ -1466,7 +1467,11 @@ function openCurrentDB() {
 	
 		appendDiscussionList(contactMap);
 		database = subDatabase;
-		showMobileSidebar();
+
+		setTimeout(() => {
+			if (database === subDatabase)
+				showMobileSidebar();
+		}, 200);
 	}
 })();
 

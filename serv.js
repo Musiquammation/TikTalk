@@ -939,17 +939,31 @@ wss.on('connection', async ws => {
 			if (idx < 0) {
 				send({
 					type: 'connect',
-					connected: false
+					connected: false,
+					error: 'ticketNotFound'
 				});
 				
 				return;
 			}
 
 
-			// Register user
+			// Remove ticket
 			__username__ = data.username;
 			clearTimeout(socketConnectionTickets[idx].timeout);
 			socketConnectionTickets.splice(idx, 1);
+
+			// Check user is not already connected
+			if (userSockets.get(__username__)) {
+				send({
+					type: 'connect',
+					connected: false,
+					error: 'alreadyConnected'
+				});
+				
+				return;
+			}
+
+			// Register user
 			userSockets.set(__username__, socketRef);
 			
 
@@ -1237,7 +1251,7 @@ wss.on('connection', async ws => {
 					notifyFCM(
 						username,
 						"New message",
-						"Notif body",
+						username + " sent you a message",
 						{username, conv: listenFor}
 					);
 				}
@@ -1283,11 +1297,10 @@ wss.on('connection', async ws => {
 
 		// Delete socket
 		if (!__username__)
-			return;		
+			return;
+
 
 		userSockets.delete(__username__);
-
-
 	});
 });
 

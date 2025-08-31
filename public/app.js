@@ -1030,7 +1030,18 @@ ws.onopen = async () => {
 const onmessage = {
 	connect(data) {
 		if (!data.connected) {
-			throw new Error("Identification failed");
+			switch (data.error) {
+			case 'ticketNotFound':
+				alert("You are not connected");
+				break;
+
+			case 'alreadyConnected':
+				alert("You are already logged in to messages on another device");
+				break;
+			}
+
+			gotoPage('settings');
+			throw new Error("Identification failed: " + data.error);
 		}
 
 		// Add missed notifications
@@ -1085,11 +1096,18 @@ const onmessage = {
 			return;
 		}
 
+		const isScrolledBottom = BODY.messages.scrollTop + BODY.messages.clientHeight >= BODY.messages.scrollHeight;
+
 		appendMessages([{
 			content: data.content,
 			date: data.date,
 			by: data.by
 		}]);
+
+		if (isScrolledBottom) {
+			BODY.messages.scrollTop = BODY.messages.scrollHeight;
+		}
+
 	},
 
 	async msgNotif(data) {

@@ -1,0 +1,93 @@
+@import url("colors.css");
+
+/* === Reset minimaliste === */
+* {
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+	font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+	background-color: var(--color-bg);
+	color: var(--color-text);
+	line-height: 1.6;
+	padding: 2rem;
+}
+
+section {
+	background-color: var(--color-bg-alt);
+	border: 1px solid var(--color-border-light);
+	border-radius: 10px;
+	padding: 1.5rem;
+	margin-bottom: 2rem;
+	box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+}
+
+h1 {
+	font-size: 1.8rem;
+	margin-bottom: 1rem;
+	color: var(--color-primary);
+}
+
+h3 {
+	font-size: 1.2rem;
+	margin-bottom: 0.5rem;
+}
+
+p {
+	font-size: 0.95rem;
+	color: var(--color-text-light);
+	margin-bottom: 1rem;
+}
+
+button {
+	background-color: var(--color-btn-bg);
+	color: var(--color-btn-text);
+	border: none;
+	padding: 0.5rem 1rem;
+	border-radius: 6px;
+	cursor: pointer;
+	transition: background-color 0.2s;
+	font-size: 0.95rem;
+}
+
+button:hover {
+	background-color: var(--color-btn-bg-hover);
+}
+
+#poolContent {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+	gap: 1rem;
+	max-height: 80vh;
+	overflow-y: auto;
+	padding-right: 0.5rem; /* espace pour scrollbar */
+}
+
+/* Limite à 3 éléments par ligne sur écrans moyens/grands */
+@media (min-width: 700px) {
+	#poolContent {
+		grid-template-columns: repeat(3, 1fr);
+	}
+}
+
+#poolContent > div {
+	background-color: var(--color-secondary);
+	border: 1px solid var(--color-border);
+	border-radius: 8px;
+	padding: 1rem;
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+}
+
+#moneyContent, #giftContent {
+	font-size: 1rem;
+	color: var(--color-text);
+	padding: 0.5rem 0;
+}
+
+i {
+	color: var(--color-text-muted);
+}

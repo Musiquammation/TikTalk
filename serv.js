@@ -56,6 +56,7 @@ const pool = new Pool({
   ...{ ssl: { rejectUnauthorized: false } }
 });
 
+
 // Init SQL
 (async () => {
 	await pool.query(`
@@ -66,6 +67,8 @@ const pool = new Pool({
 			password_hash VARCHAR(255) NOT NULL,
 			score FLOAT DEFAULT 3,
 			money INT DEFAULT 0,
+			money_toGive FLOAT DEFAULT 0,
+			current_realconvs_count INT DEFAULT 0,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			ban BIGINT DEFAULT 0
 		);
@@ -102,6 +105,46 @@ const pool = new Pool({
 		CREATE INDEX IF NOT EXISTS tiktalk_idx_tokensSES 
 		ON tiktalk_tokensSES(username);
 	`).catch(err => console.error(err));
+
+	await pool.query(`
+		CREATE TABLE IF NOT EXISTS tiktalk_payments (
+		id SERIAL PRIMARY KEY,
+		user_id INTEGER NOT NULL REFERENCES tiktalk_users(id) ON DELETE CASCADE,
+		type INTEGER,
+		value TEXT NOT NULL,
+		expire_date BIGINT NOT NULL);
+	`).catch(err => console.error(err));
+
+
+	await pool.query(`
+		CREATE TABLE IF NOT EXISTS tiktalk_reports (
+			id SERIAL PRIMARY KEY,
+			username VARCHAR(255) NOT NULL REFERENCES tiktalk_users(username) ON DELETE CASCADE,
+			reporter VARCHAR(255) NOT NULL REFERENCES tiktalk_users(username) ON DELETE CASCADE,
+			date BIGINT NOT NULL,
+			CONSTRAINT unique_report UNIQUE (username, reporter)
+		);
+
+	`).catch(err => console.error(err));
+
+	await pool.query(`
+		CREATE INDEX IF NOT EXISTS tiktalk_idx_reports
+		ON tiktalk_reports(username);
+	`).catch(err => console.error(err));
+
+	await pool.query(`
+		CREATE TABLE IF NOT EXISTS tiktalk_realconvs (
+			id SERIAL PRIMARY KEY,
+			user0 VARCHAR(255) NOT NULL,
+			user1 VARCHAR(255) NOT NULL,
+			CONSTRAINT fk_user0 FOREIGN KEY (user0) REFERENCES tiktalk_users(username) ON DELETE CASCADE,
+			CONSTRAINT fk_user1 FOREIGN KEY (user1) REFERENCES tiktalk_users(username) ON DELETE CASCADE,
+			CONSTRAINT check_order CHECK (user0 < user1),
+			CONSTRAINT unique_pair UNIQUE (user0, user1)
+		);
+	`).catch(err => console.error(err));
+
+	await deleteExpiredPayments();
 })();
 
 
@@ -149,6 +192,24 @@ function generateResetCode() {
 	return Math.floor(100000 + Math.random() * 900000).toString(); // 6 digits
 }
 
+function getRealConvMoneyRatio(n) {
+	const table = [
+		1,
+		0.75,
+		0.375,
+		0.1666667,
+		0.0729167,
+		0.0333333,
+		0.0159722,
+		0.007862,
+	];
+
+	if (n > table.length)
+		return 0.001;
+
+	return table[n];
+}
+
 
 /**
  * Generate a 64-bit FNV-1a hash from an array of strings.
@@ -159,13 +220,13 @@ function hashStrings64(arr) {
 		throw new TypeError('Expected an array of strings');
 	}
 
-	const items = arr.map(s => (s == null ? '' : String(s)).trim());
+	const items = arr.map(s => (s == null ? '' : String(s)).trim()).sort();
 
 	const joined = items.join('\u0000'); // null separator
 
 	// FNV-1a 64-bit constants
-	let h = BigInt('0xcbf29ce484222325'); // offset basis
-	const fnvPrime = BigInt('0x100000001b3');
+	let h = BigInt(process.env.HASH_STRINGS_OFFSET); // offset basis
+	const fnvPrime = BigInt(process.env.HASH_STRINGS_PRIME);
 
 	for (let i = 0; i < joined.length; i++) {
 		h ^= BigInt(joined.charCodeAt(i));
@@ -208,12 +269,36 @@ class SearchingClient {
 }
 
 class SearchingClientPool {
-	constructor(name, isAccessible) {
+	static PAIEMENT_DURATION = 86400000 * 3; // 3 days
+
+	constructor(name, price, anonymousForbidden = true) {
 		this.name = name;
-		this.isAccessible = isAccessible;
+		this.price = price;
+		this.anonymousForbidden = anonymousForbidden;
 		
 		/** @type SearchingClient[] */
 		this.clients = [];
+	}
+
+	async isAccessible(username) {
+		if (!this.anonymousForbidden && isAnonymousUsername(username)) {
+			return false;
+		}
+
+		if (this.name === "default")
+			return true;
+
+		// Search for payment
+		return (await pool.query(`
+			SELECT 1
+			FROM tiktalk_payments p
+			JOIN tiktalk_users u ON p.user_id = u.id
+			WHERE u.username = $1
+			AND p.type = $2
+			AND p.value = $3
+			AND p.expire_date >= $4
+			LIMIT 1;
+		`, [username, PaymentType.CLIENT_POOL, this.name, Date.now()])).rowCount > 0;
 	}
 
 	isInside(username) {
@@ -338,15 +423,34 @@ class DiscussionCache {
 		this.users = users;
 		this.connectedUsers = 0;
 		this.typingUsersMap = new Int8Array(users.length);
+		this.lastMsgAuthor = null;
+		this.alternedMessageCount = 0;
 	}
 
-	setTypingMode(index, value) {
+	setTypingMode(index, value, silent = false) {
 		if (this.typingUsersMap[index] == value)
 			return;
 
 		this.typingUsersMap[index] = value;
 
-		/// TODO: send to users
+		if (silent)
+			return;
+			
+		// Send typing mode to users
+		const sentObject = JSON.stringify({
+			type: value ? 'typingStart' : 'typingStop',
+			index
+		});
+
+		for (let i = 0; i < this.users.length; i++) {
+			if (i === index)
+				continue;
+
+			const socketRef = userSockets.get(this.users[i]);
+			if (socketRef) {
+				socketRef.ws.send(sentObject);
+			}
+		}
 	}
 }
 
@@ -418,7 +522,14 @@ class SocketConnectionTicket {
 
 
 
+class PaymentType {
+	static CLIENT_POOL = 1;
 
+	constructor(getPrice, run) {
+		this.getPrice = getPrice;
+		this.run = run;
+	}
+}
 
 
 
@@ -433,8 +544,9 @@ const userSockets = new Map();
 
 /** @type SearchingClientPool[] */
 const searchingClientsPools = [
-	new SearchingClientPool("everyone", () => true),
-	new SearchingClientPool("default", username => !isAnonymousUsername(username))
+	new SearchingClientPool("everyone", -1, false),
+	new SearchingClientPool("default", -1),
+	new SearchingClientPool("nice", 10)
 ];
 
 
@@ -456,6 +568,28 @@ const notifsFCM = new Map();
 /** @type Map<string, { code, expires, timeout, userId }> */
 const resetCodes = new Map();
 
+const paymentTypes = {
+	clientPool: new PaymentType(
+		(username, data) => {
+			const name = data.name;
+			for (let pool of searchingClientsPools)
+				if (pool.name === name)
+					return pool.price;
+
+			return -1;
+		},
+
+		(username, data) => ({
+			type: PaymentType.CLIENT_POOL,
+			value: data.name,
+			duration: SearchingClientPool.PAIEMENT_DURATION
+		})
+
+		
+	)
+};
+
+
 function generateResetCode() {
 	return Math.floor(100000 + Math.random() * 900000).toString(); // 6 digits
 }
@@ -472,6 +606,8 @@ function generateResetCode() {
  * @param {SearchingClient[]} clients 
  */
 function joinClients(clients) {
+	clients.sort((a, b) => a.username <= b.username);
+
 	// Create a DiscussionCache
 	const usernames = clients.map(client => client.username);
 	const key = hashStrings64(usernames);
@@ -484,14 +620,14 @@ function joinClients(clients) {
 
 
 	// Send a message
-	const sendObject = JSON.stringify({
+	const sentObject = JSON.stringify({
 		type: 'meet',
 		usernames,
 		key
 	});
 
 	for (let i of clients) {
-		i.socketRef.ws.send(sendObject);
+		i.socketRef.ws.send(sentObject);
 	}
 }
 
@@ -635,6 +771,63 @@ async function getUserSession(sessionToken) {
 	userSessions.set(sessionToken, session);
 	return session;
 }
+
+
+
+
+
+async function addPayment(username, type, value, duration) {
+	const now = Date.now();
+	duration += now;
+
+	await pool.query(`
+		WITH deleted AS (
+			DELETE FROM tiktalk_payments
+			WHERE expire_date < $3
+		)
+		INSERT INTO tiktalk_payments (user_id, type, value, expire_date)
+		SELECT id, $5, $1, $2
+		FROM tiktalk_users
+		WHERE username = $4;
+	`, [value, duration, now, username, type]);
+}
+
+
+
+async function collectUserPayments(username) {
+	const now = Date.now();
+	const res = await pool.query(
+		`WITH deleted AS (
+			DELETE FROM tiktalk_payments
+			WHERE expire_date < $1
+		)
+		SELECT p.*
+		FROM tiktalk_payments p
+		JOIN tiktalk_users u ON p.user_id = u.id
+		WHERE u.username = $2
+		ORDER BY p.expire_date ASC;`,
+		[now, username]
+	);
+
+	return res.rows;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -898,6 +1091,81 @@ app.get('/api/collectPoolNames', (req, res) => {
 });
 
 
+app.post('/api/pay', async (req, res) => {
+	const userSession = await getUserSession(req.body.sessionToken);
+	if (!userSession) {
+		res.json({error: 'notConnected'});
+		return;
+	}
+
+
+	const paymentType = paymentTypes[req.body.type];
+	if (!paymentType) {
+		res.json({error: 'notFound'});
+		return;
+	}
+
+	const price = paymentType.getPrice(userSession.username, req.body.data);
+	if (price < 0) {
+		res.json({error: 'refused'});
+		return;
+	}
+
+	const result = await pool.query(
+		`UPDATE tiktalk_users
+    	SET money = money - $1
+    	WHERE username = $2 AND money >= $1
+    	RETURNING money;`,
+		[price, userSession.username]
+	);
+
+	if (result.rowCount === 0) {
+		// Payment failed
+		res.json({error: 'money'});
+		return;
+
+	}
+
+
+	// Add payment
+	const payment = paymentType.run(userSession.username, req.body.data);
+	await addPayment(userSession.username, payment.type, payment.value, payment.duration);
+
+
+	// Payment done
+	res.json({money: result.rows[0].money});
+});
+
+app.post('/api/getShopInfo', async (req, res) => {
+	const userSession = await getUserSession(req.body.sessionToken);
+	if (!userSession || isAnonymousUsername(userSession.username)) {
+		res.json({ok: false});
+		return;
+	}
+
+	const payments = await collectUserPayments(userSession.username);
+	const money = await pool.query(
+		`SELECT money FROM tiktalk_users WHERE username = $1`,
+		[userSession.username]
+	);
+
+	const searchPools = searchingClientsPools.map(p => ({
+		name: p.name,
+		price: p.price,
+		anonymousAllowed: p.anonymousAllowed,
+		userCount: p.clients.length
+	}));
+
+
+	res.json({
+		ok: true,
+		payments,
+		money: money.rows[0].money,
+		searchPools
+	});
+});
+
+
 
 
 
@@ -998,6 +1266,12 @@ wss.on('connection', async ws => {
 							throw new Error("User not present in DiscussionCache users");
 						}
 
+						// Check if (key, fullUsers) is a valid couple
+						if (key != hashStrings64(fullUsers)) {
+							throw new Error("Illegal (key, fullUsers) combinaison");
+						}
+
+						// Create discussion cache
 						cache = new DiscussionCache(fullUsers);
 						discussionCaches.set(key, cache);
 					}
@@ -1055,7 +1329,7 @@ wss.on('connection', async ws => {
 				return;
 			}
 
-			if (!pool.isAccessible(username)) {
+			if (!(await pool.isAccessible(username))) {
 				send({type: 'search_notAccessible'});
 				return;
 			}
@@ -1076,6 +1350,18 @@ wss.on('connection', async ws => {
 
 
 		listenFor(data) {
+			// Set typing mode of the user
+			if (socketRef.listenFor) {
+				const obj = socketRef.discussions.get(socketRef.listenFor);
+				if (!obj)
+					throw new Error("Discussion cache not found");
+				
+				const {cache, position} = obj;
+				cache.setTypingMode(position, false);
+
+			}
+
+
 			// Update listenFor
 			const key = data.key;
 			
@@ -1122,7 +1408,6 @@ wss.on('connection', async ws => {
 						});
 					}
 				}
-
 			}
 
 
@@ -1143,7 +1428,7 @@ wss.on('connection', async ws => {
 				writingFlags: discussion.writingFlags.map(v => v ? "1" : "0").join("")
 			});
 
-			const sendObject = JSON.stringify({
+			const sentObject = JSON.stringify({
 				type: 'updateSeen',
 				seenMark
 			});
@@ -1152,12 +1437,12 @@ wss.on('connection', async ws => {
 				if (i === userIndex)
 					continue;
 
-				userSockets.get(discussion.users[i])?.ws.send(sendObject);
+				userSockets.get(discussion.users[i])?.ws.send(sentObject);
 			}
 		},
 
 
-		message(data) {
+		async message(data) {
 			const listenFor = socketRef.listenFor;
 			if (!listenFor)
 				throw new Error("ListenFor required to send a message");
@@ -1176,7 +1461,11 @@ wss.on('connection', async ws => {
 			const users = cache.users;
 			const date = Date.now();
 
+			// Set typing mode (without alerting users)
+			cache.setTypingMode(position, false, true);
 
+
+			// Send/Collect messages/notifs
 			for (let index = 0; index < users.length; index++) {
 				const username = users[index];
 
@@ -1248,7 +1537,6 @@ wss.on('connection', async ws => {
 				
 				} else {
 					// Notify using FCM
-					/// TODO: notif content
 					notifyFCM(
 						username,
 						"New message",
@@ -1258,12 +1546,146 @@ wss.on('connection', async ws => {
 				}
 			}
 
+			// Increase cache.alternedMessageCount and maybe give money
+			if (position !== cache.lastMsgAuthor) {
+				cache.lastMsgAuthor = position;
+				if (
+					++cache.alternedMessageCount === +process.env.MONEY_GIVE_ALTERNED_COUNT
+					&& cache.users.length === 2
+				) {
+					console.log("GIVE!");
+
+					const res0 = await pool.query(
+						'SELECT 1 FROM tiktalk_realconvs WHERE user0 = $1 AND user1 = $2',
+						cache.users
+					);
+					
+					// Give money
+					if (res0.rowCount == 0) {
+						// Save couple
+						await pool.query(
+							'INSERT INTO tiktalk_realconvs (user0, user1) VALUES ($1, $2)',
+							cache.users
+						);
+
+						// Give money
+						for (const user of cache.users) {
+							const res = await pool.query(
+								`SELECT current_realconvs_count
+								FROM tiktalk_users
+								WHERE username = $1 FOR UPDATE`,
+								[user]
+							);
+
+							const currentCount = res.rows[0].current_realconvs_count;
+							const delta = getRealConvMoneyRatio(currentCount) *
+								process.env.MONEY_GIVE_ALTERNED_VALUE;
+
+
+							await pool.query(`
+								UPDATE tiktalk_users
+								SET money_toGive = money_toGive + $2,
+									current_realconvs_count = current_realconvs_count + 1
+								WHERE username = $1
+							`, [user, delta]);
+						}
+					}
+
+				}
+			}
+
+
+
 			// Send message sent
 			send({
 				type: 'msgReceived',
 				id: msgId,
 				seenAll: !discussion,
 				date
+			});
+		},
+
+		typingStart() {
+			const obj = socketRef.discussions.get(socketRef.listenFor);
+			if (!obj)
+				return;
+
+			const {cache, position} = obj;
+			cache.setTypingMode(position, true);
+		},
+
+		typingStop() {
+			const obj = socketRef.discussions.get(socketRef.listenFor);
+			if (!obj)
+				return;
+
+			const {cache, position} = obj;
+			cache.setTypingMode(position, false);
+		},
+
+		async report() {
+			// Get reported username
+			let reported = null;
+			if (!isAnonymousUsername(__username__) && socketRef.listenFor) {
+				const cache = discussionCaches.get(socketRef.listenFor);
+				if (cache) {
+					if (cache.users.length === 2) {
+						reported = cache.users[0] === __username__ ?
+							cache.users[1] : cache.users[0];
+					}
+				}
+			}
+
+
+			if (!reported) {
+				send({
+					type: 'reportResult',
+					ok: false
+				});
+				return;
+			}
+
+			const now = Date.now();
+			const cutoff = now - process.env.REPORT_REFRESH_PERIOD * 86400000;
+
+
+			// Remove old reports
+			await pool.query(
+				`DELETE FROM tiktalk_reports 
+				WHERE date < $1`,
+				[cutoff]
+			);
+
+			// Add report
+			const insertResult = await pool.query(
+				`INSERT INTO tiktalk_reports (username, reporter, date)
+				VALUES ($1, $2, $3)
+				ON CONFLICT (username, reporter) DO NOTHING`,
+				[reported, __username__, now]
+			);
+
+			// Get user reports
+			const { rows } = await pool.query(
+				`SELECT COUNT(*)::int AS count
+				FROM tiktalk_reports
+				WHERE username = $1`,
+				[reported]
+			);
+
+			
+			// Ban user
+			if (rows[0].count >= +process.env.REPORT_COUNT_LIMIT) {
+				await pool.query(`
+					UPDATE tiktalk_users
+					SET ban = 1
+					WHERE username = $1;
+				`, [reported])
+			}
+
+			// Send report result
+			send({
+				type: 'reportResult',
+				ok: insertResult.rowCount > 0
 			});
 		}
 	};
@@ -1332,38 +1754,43 @@ setInterval(() => {
 function scheduleRush() {
 	const now = new Date();
 
-	// Timezone offset for Paris (in minutes)
-	const parisOffset = -new Date().toLocaleString("en-US", { timeZone: "Europe/Paris" }).split(" ")[1];
+	// Create tomorrow's date in UTC
+	const tomorrowUTC = new Date(Date.UTC(
+		now.getUTCFullYear(),
+		now.getUTCMonth(),
+		now.getUTCDate() + 1,
+		0, 0, 0, 0
+	));
 
-	// Today in Paris timezone
-	const parisNow = new Date(
-		now.toLocaleString("en-US", { timeZone: "Europe/Paris" })
+	// Random hour between 10 and 20 Paris time
+	const randomHourParis = 10 + Math.random() * 10;
+	const hour = Math.floor(randomHourParis);
+	const minute = Math.floor((randomHourParis - hour) * 60);
+
+	tomorrowUTC.setUTCHours(hour - 1, minute, 0, 0); // -1 because Paris is UTC+1 in standard time
+
+	const delay = tomorrowUTC.getTime() - now.getTime();
+
+	console.log(
+		"Notif rush scheduled for Paris time:",
+		tomorrowUTC.toLocaleString("fr-FR", { timeZone: "Europe/Paris" })
 	);
 
-	// min bound: today 10:00 Paris time
-	const min = new Date(parisNow);
-	min.setHours(10, 0, 0, 0);
 
-	// max bound: today 20:00 Paris time
-	const max = new Date(parisNow);
-	max.setHours(20, 0, 0, 0);
 
-	if (parisNow > max) {
-		min.setDate(min.getDate() + 1);
-		max.setDate(max.getDate() + 1);
-	}
 
-	const diff = max.getTime() - min.getTime();
-	const randomOffset = Math.floor(Math.random() * diff);
-
-	const execTimeParis = new Date(min.getTime() + randomOffset);
-	const delay = execTimeParis.getTime() - parisNow.getTime();
-
-	console.log("Next execution (Paris time):", execTimeParis.toString());
 
 	setTimeout(async () => {
 		scheduleRush();
 
+		// Give money to users
+		await pool.query(`UPDATE tiktalk_users
+			SET money = money + CAST(money_toGive AS INT),
+    		money_toGive = 0;`
+		);
+
+		
+		// Send notifications
 		const users = await pool.query(
 			"SELECT username FROM tiktalk_users;"
 		);
@@ -1380,6 +1807,26 @@ function scheduleRush() {
 }
 
 scheduleRush();
+
+
+
+// Delete expired paiements
+async function deleteExpiredPayments() {
+	const now = Date.now();
+	const res = await pool.query(
+		"DELETE FROM tiktalk_payments WHERE expire_date < $1",
+		[now]
+	);
+	
+	console.log(`${res.rowCount} payments deleted.`);
+}
+
+
+setInterval(deleteExpiredPayments, 86400000); // daily
+
+
+
+
 
 
 const PORT = process.env.PORT;

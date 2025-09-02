@@ -26,6 +26,18 @@ function compareKeys(a, b) {
 	return a === b;
 }
 
+function isAnonymousUsername(username) {
+	if (!username)
+		return true;
+
+	return username.startsWith("anonymous_");
+}
+
+function isAtBottom(container, tolerance = 5) {
+  return container.scrollTop + container.clientHeight >= container.scrollHeight - tolerance;
+}
+
+
 
 let __username__ = null;
 
@@ -34,7 +46,7 @@ let currentContact = null;
 let currentDiscussionBlockLevel = -1;
 let isAppendingPreviousDiscussionBlock = false;
 let currentLastDate = null;
-let writingFlags = null;
+let typingFlags = null;
 
 
 class UserProperties {
@@ -56,6 +68,7 @@ class ContactDiv {
 		resetNotifBadge(this.div);
 	}
 }
+
 
 class PendingMessage {
 	constructor(div, date) {
@@ -517,14 +530,13 @@ const BODY = {
 	messageInput: document.getElementById('messageInput'),
 	sendBtn: document.getElementById('sendBtn'),
 	convTitle: document.getElementById('convTitle'),
-	reportBtn: document.getElementById('reportBtn'),
-	blockBtn: document.getElementById('blockBtn'),
 	searchBtn: document.getElementById('searchBtn'),
 	disconnectBtn: document.getElementById('disconnectBtn'),
 	searchingAnim: document.getElementById('searchingAnim'),
 	searchDots: document.getElementById('searchDots'),
 	backBtn: document.getElementById('backBtn'),
 	isTyping: document.getElementById('isTyping'),
+	reportBtn: document.getElementById('reportBtn'),
 }
 
 
@@ -597,8 +609,8 @@ async function showDiscussion(contact, contactId, discussionClickDiv) {
 
 	// Reset content
 	BODY.messages.innerHTML = "";
-	writingFlags = new Int8Array(contact.users.length);
-	updateWritingFlags();
+	typingFlags = new Int8Array(contact.users.length);
+	updateTypingFlags();
 
 
 	// Show two first message blocks
@@ -636,6 +648,15 @@ async function showDiscussion(contact, contactId, discussionClickDiv) {
 	// Handle scroll
 	BODY.messages.scrollTop = BODY.messages.scrollHeight;
 
+
+	// Buttons
+	if (contact.users.length > 2 || isAnonymousUsername(__username__)) {
+		BODY.reportBtn.classList.add('hidden');
+	} else {
+		BODY.reportBtn.classList.remove('hidden');
+	}
+
+
 	// Send listenFor
 	send({
 		type: 'listenFor',
@@ -651,7 +672,7 @@ function appendDiscussionBlock(messages, lastDate, container, users, pending = f
 		generatedIds = [];
 	}
 
-	const isScrolledBottom = BODY.messages.scrollTop + BODY.messages.clientHeight >= BODY.messages.scrollHeight;
+	const shouldScroll = isAtBottom(BODY.messages);
 
 	for (let msg of messages) {
 		const msgDate = new Date(msg.date);
@@ -715,7 +736,7 @@ function appendDiscussionBlock(messages, lastDate, container, users, pending = f
 		}
 	}
 
-	if (isScrolledBottom) {
+	if (shouldScroll) {
 		BODY.messages.scrollTop = BODY.messages.scrollHeight;
 	}
 
@@ -746,7 +767,17 @@ async function appendPreviousDiscussionBlock() {
 		container,
 		currentContact.users
 	);
+	
+	const oldHeight = BODY.messages.scrollHeight;
+	const oldScrollTop = BODY.messages.scrollTop;
+
 	BODY.messages.prepend(container);
+
+	const newHeight = BODY.messages.scrollHeight;
+	BODY.messages.scrollTop = oldScrollTop + (newHeight - oldHeight);
+
+	isAppendingPreviousDiscussionBlock = false;
+
 
 	isAppendingPreviousDiscussionBlock = false;
 
@@ -826,12 +857,6 @@ function updateSeenMark(mark) {
 
 
 
-async function setSearchPool(searchPool) {
-	const properties = await database.getUserProperties();
-	properties.searchPool = searchPool;
-	await database.updateUserProperties();
-}
-
 
 
 
@@ -861,55 +886,75 @@ function stopSearchingAnim() {
 
 
 
-let updateWritingFlagsPointNumber = 0;
-let updateWritingFlagsInterval = 0;
+let updateTypingFlagsPointNumber = 0;
+let updateTypingFlagsInterval = 0;
 
-function updateWritingFlags() {
-	clearInterval(updateWritingFlagsInterval);
+function updateTypingFlags() {
+	clearInterval(updateTypingFlagsInterval);
 	BODY.isTyping.innerHTML = '';
 
-	let nobodyIsWriting;
+	let nobodyIsTyping;
 
-	if (writingFlags && currentContact) {
-		for (let i of writingFlags) {
+	if (typingFlags && currentContact) {
+		for (let i of typingFlags) {
 			if (i !== 0) {
-				nobodyIsWriting = true;
+				nobodyIsTyping = true;
 				break;
 			}
 		}
 
-		nobodyIsWriting = false;
+		nobodyIsTyping = false;
 
 	} else {
-		nobodyIsWriting = true;
+		nobodyIsTyping = true;
 	}
 
-	if (nobodyIsWriting) {
+	if (nobodyIsTyping)
 		return;
-	}
+	
 
 	const usernames = [];
 	for (let i = 0; i < currentContact.users.length; i++)
-		if (writingFlags[i] && currentContact.users[i] !== null)
+		if (typingFlags[i] && currentContact.users[i] !== null)
 			usernames.push(currentContact.users[i]);
 		
-	if (usernames)
+	if (usernames.length === 0)
+		return;
+
 	if (usernames.length === 1) {
 		BODY.isTyping.innerHTML = `${usernames[0]} is typing<span id='isTypingAnim'></span>`;
 	} else {
 		BODY.isTyping.innerHTML = `${usernames.join(", ")} are typing<span id='isTypingAnim'></span>`;
 	}
 
-	updateWritingFlagsInterval = setInterval(() => {
-		updateWritingFlagsPointNumber++;
+	updateTypingFlagsInterval = setInterval(() => {
+		updateTypingFlagsPointNumber++;
 
-		if (updateWritingFlagsPointNumber >= 4) {
-			updateWritingFlagsPointNumber = 0;
+		if (updateTypingFlagsPointNumber >= 4) {
+			updateTypingFlagsPointNumber = 0;
 		}
 
-		document.getElementById("isTypingAnim").innerText = ".".repeat(updateWritingFlagsPointNumber);
+		document.getElementById("isTypingAnim").innerText = ".".repeat(updateTypingFlagsPointNumber);
 	}, 400);
 }
+
+
+function stopTypingPosition(position) {
+	if (currentContact && typingFlags) {
+		typingFlags[position] = 0;
+		updateTypingFlags();
+	}
+
+}
+
+function sendTypingStart() {
+	send({type: 'typingStart'});	
+}
+
+function sendTypingStop() {
+	send({type: 'typingStop'});	
+}
+
 
 
 async function openKeyDiscussion(key, usernames) {
@@ -1030,7 +1075,6 @@ ws.onopen = async () => {
 
 
 
-
 	// Connect websocket
 	send({
 		type: 'connect',
@@ -1112,7 +1156,7 @@ const onmessage = {
 			return;
 		}
 
-		const isScrolledBottom = BODY.messages.scrollTop + BODY.messages.clientHeight >= BODY.messages.scrollHeight;
+		const shouldScroll = isAtBottom(BODY.messages);
 
 		appendMessages([{
 			content: data.content,
@@ -1120,10 +1164,11 @@ const onmessage = {
 			by: data.by
 		}]);
 
-		if (isScrolledBottom) {
+		stopTypingPosition(data.by);
+
+		if (shouldScroll) {
 			BODY.messages.scrollTop = BODY.messages.scrollHeight;
 		}
-
 	},
 
 	async msgNotif(data) {
@@ -1180,9 +1225,13 @@ const onmessage = {
 			for (let i = 0; i < data.writingFlags.length; i++)
 				wf[i] = data.writingFlags[i] === '1' ? 1 : 0;
 
-			writingFlags = wf;
-			updateWritingFlags();
+			typingFlags = wf;
+			updateTypingFlags();
+		} else {
+			typingFlags = null;
 		}
+
+		updateTypingFlags();
 	},
 
 	updateSeen(data) {
@@ -1210,7 +1259,30 @@ const onmessage = {
 		return;
 	},
 
-	
+
+	typingStart(data) {
+		if (!currentContact)
+			return;
+
+		if (!typingFlags) {
+			typingFlags = new Int8Array(currentContact.users.length);
+		}
+
+		typingFlags[data.index] = 1;
+		updateTypingFlags();
+	},
+
+	typingStop(data) {
+		stopTypingPosition(data.index);
+	},
+
+	reportResult(data) {
+		if (data.ok) {
+			alert("Report sent successfully!");
+		} else {
+			alert("Failed to report user");
+		}
+	},
 
 	error(data) {
 		throw data.error;
@@ -1277,19 +1349,23 @@ async function sendMessage(content) {
 
 
 function onAppResume() {
-	console.log("app resumed");
-
 	if (currentContact) {
 		send({
 			type: 'listenFor',
 			key: currentContact.key
 		});
+
+		
+		database.markAsSeen(currentContactId);
+		const discussionClickDiv = contactDivs.get(currentContact.key).div;
+		
+		if (discussionClickDiv) {
+			resetNotifBadge(discussionClickDiv);
+		}
 	}
 }
 
 function onAppPause() {
-	console.log("app paused");
-
 	if (currentContact) {
 		send({
 			type: 'listenFor',
@@ -1370,13 +1446,43 @@ BODY.messages.onscroll = () => {
 };
 
 
+let userTypingTimeout;
+let isUserTyping = false;
+
 BODY.messageInput.onkeydown = e => {
 	if (e.key === "Enter") {
-        e.preventDefault();
+		e.preventDefault();
 		sendMessage(BODY.messageInput.value.trim());
 		BODY.messageInput.value = "";
-    }
-}
+		clearTimeout(userTypingTimeout);
+		isUserTyping = false;
+		return;
+	}
+
+	setTimeout(() => {
+		if (BODY.messageInput.value.trim() === "") {
+			clearTimeout(userTypingTimeout);
+			if (isUserTyping) {
+				sendTypingStop();
+				isUserTyping = false;
+			}
+			return;
+		}
+	});
+
+	if (!isUserTyping) {
+		sendTypingStart();
+		isUserTyping = true;
+	}
+
+	clearTimeout(userTypingTimeout);
+	userTypingTimeout = setTimeout(() => {
+		sendTypingStop();
+		isUserTyping = false;
+	}, 3000);
+};
+
+
 
 BODY.sendBtn.onclick = () => {
 	sendMessage(BODY.messageInput.value.trim());
@@ -1384,19 +1490,23 @@ BODY.sendBtn.onclick = () => {
 };
 
 
-BODY.searchBtn.onclick = async () => {
+BODY.searchBtn.onclick = () => {
 	startSearchingAnim();
 	BODY.searchingAnim.classList.add('notConfirmed');
 
-	const properties = await database.getUserProperties();
-	startSearch(properties.searchPool);
+	let searchPool = localStorage.getItem('searchPool');
+	if (!searchPool) {
+		searchPool = isAnonymousUsername(__username__) ?
+			'everyone' : 'default';
+	}
+
+	startSearch(searchPool);
 };
 
 
 BODY.disconnectBtn.onclick = async () => {
 	localStorage.removeItem(CURRENT_USERNAME_KEY);
 	
-		
 	await goFetch(
 		"/api/logout",
 		{sessionToken: localStorage.getItem('sessionToken')},
@@ -1406,6 +1516,13 @@ BODY.disconnectBtn.onclick = async () => {
 	localStorage.removeItem('sessionToken');
 	gotoPage('index');
 };
+
+BODY.reportBtn.onclick = () => {
+	send({type: 'report'});
+};
+
+
+
 
 
 document.getElementById('settingsBtn').onclick = () => {
@@ -1421,6 +1538,8 @@ document.addEventListener("click", (e) => {
 		hideMobileSidebar();
 	}
 });
+
+
 
 
 

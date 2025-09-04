@@ -33,7 +33,7 @@ function isAnonymousUsername(username) {
 	return username.startsWith("anonymous_");
 }
 
-function isAtBottom(container, tolerance = 5) {
+function isAtBottom(container, tolerance = 10) {
   return container.scrollTop + container.clientHeight >= container.scrollHeight - tolerance;
 }
 
@@ -646,7 +646,7 @@ async function showDiscussion(contact, contactId, discussionClickDiv) {
 	}
 
 	// Handle scroll
-	BODY.messages.scrollTop = BODY.messages.scrollHeight;
+	scrollToBottom();
 
 
 	// Buttons
@@ -890,6 +890,10 @@ let updateTypingFlagsPointNumber = 0;
 let updateTypingFlagsInterval = 0;
 
 function updateTypingFlags() {
+	if (isAtBottom(BODY.messages)) {
+		scrollToBottom(true);
+	}
+
 	clearInterval(updateTypingFlagsInterval);
 	BODY.isTyping.innerHTML = '';
 
@@ -1417,9 +1421,19 @@ if (usingCapacitor) {
 
 
 
+BODY.isTyping.style.bottom = document.getElementById("inputBar").offsetHeight + "px";
 
 
+function scrollToBottom(smooth = false, maxTries = 10) {
+	let tries = 0;
 
+	setTimeout(() => {
+		BODY.messages.scrollTo({
+			top: BODY.messages.scrollHeight,
+			behavior: smooth ? "smooth" : "auto"
+		});
+	}, 25);
+}
 
 
 
@@ -1525,6 +1539,11 @@ BODY.reportBtn.onclick = () => {
 
 
 
+window.addEventListener("resize", () => {
+	if (isAtBottom(BODY.messages)) {
+		scrollToBottom();
+	}
+});
 
 document.getElementById('settingsBtn').onclick = () => {
 	gotoPage('settings');

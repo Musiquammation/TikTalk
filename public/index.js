@@ -10,6 +10,11 @@
 	}
 })();
 
+document.getElementById('tryBtn').onclick = () => {
+	gotoPage('app');
+};
+
+
 document.getElementById('loginBtn').onclick = () => {
 	gotoPage('login');
 };

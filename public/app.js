@@ -1200,7 +1200,8 @@ const onmessage = {
 							title: "New message!",
 							body: usernameString + " sent you a message",
 							id: 1,
-							extra: {key, usernames: JSON.stringify(usernames)}
+							extra: {key, usernames: JSON.stringify(usernames)},
+							smallIcon: "ic_stat_ic_notification"
 						}
 					],
 				});

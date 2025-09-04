@@ -14,13 +14,21 @@ document.getElementById('tryBtn').onclick = () => {
 	gotoPage('app');
 };
 
-
 document.getElementById('loginBtn').onclick = () => {
 	gotoPage('login');
 };
+
 document.getElementById('signupBtn').onclick = () => {
 	gotoPage('signup');
 };
+
+
+if (usingCapacitor) {
+
+} else {
+	document.getElementById('downloadBtn').classList.remove('hidden');
+	document.getElementById('privacyA').classList.remove('hidden');
+}
 
 
 

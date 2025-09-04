@@ -383,8 +383,20 @@ body {
 }
 
 
-.pending {
-	color: var(--color-text-muted);
+.message-bubble.me.pending {
+	animation: pendingEffect 1s forwards;
+}
+
+@keyframes pendingEffect {
+	0% {
+		background: var(--color-bubble-me);
+	}
+	80% {
+		background: var(--color-bubble-me);
+	}
+	100% {
+		background-color: var(--color-warn);
+  	}
 }
 
 #isTyping {

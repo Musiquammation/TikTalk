@@ -26,6 +26,7 @@ document.getElementById('signupBtn').onclick = () => {
 if (usingCapacitor) {
 
 } else {
+	document.getElementById('tryBtn').classList.remove('hidden');
 	document.getElementById('downloadBtn').classList.remove('hidden');
 	document.getElementById('privacyA').classList.remove('hidden');
 }

@@ -259,8 +259,7 @@ class SocketRef {
 class SearchingClient {
 	static START_LAPS = 3;
 
-	constructor(socketRef, username, score, blacklist) {
-		this.socketRef = socketRef;
+	constructor(username, score, blacklist) {
 		this.username = username;
 		this.score = score;
 		this.lap = SearchingClient.START_LAPS;
@@ -305,6 +304,12 @@ class SearchingClientPool {
 		return this.clients.some(client => client.username === username);
 	}
 
+	removeUser(username) {
+		for (let i = this.clients.length - 1; i >= 0; i--)
+			if (this.clients[i].username === username)
+				this.clients.splice(i, 1);
+	}
+
 	// Keep increasing order
 	/// TODO: check order (normally, use < instead)
 	pushClient(client) {
@@ -314,6 +319,13 @@ class SearchingClientPool {
 		}
 
 		this.clients.splice(index, 0, client);
+	}
+
+	removeIfPresent(username) {
+		const idx = this.clients.findIndex(x => x.username === username);
+		if (idx >= 0)
+			this.clients.slice(idx, 1);
+
 	}
 
 	// Meet clients
@@ -532,7 +544,45 @@ class PaymentType {
 }
 
 
+class MissedSearchResult {
+	static LIFETIME = 14 * 86400000; // 14 days
 
+	constructor(username, usernames, key) {
+		this.username = username;
+		this.usernames = usernames;
+		this.key = key;
+		this.timeout = setTimeout(
+			() => this.removeResult(),
+			MissedSearchResult.LIFETIME
+		);
+	}
+
+	removeResult() {
+		const arr = missedSearchResults.get(this.username);
+		if (!arr)
+			return;
+
+		const index = arr.indexOf(this);
+		if (index !== -1) {
+			arr.splice(index, 1);
+		}
+
+		if (arr.length === 0) {
+			missedSearchResults.delete(key);
+		}
+	}
+
+	static getAndRemove(username) {
+		const arr = missedSearchResults.get(username);
+		if (!arr)
+			return null;
+
+		for (let i of arr)
+			clearTimeout(i.timeout);
+
+		return arr;
+	}
+}
 
 
 
@@ -567,6 +617,9 @@ const notifsFCM = new Map();
 
 /** @type Map<string, { code, expires, timeout, userId }> */
 const resetCodes = new Map();
+
+const missedSearchResults = new Map();
+
 
 const paymentTypes = {
 	clientPool: new PaymentType(
@@ -614,20 +667,48 @@ function joinClients(clients) {
 	const cache = new DiscussionCache(usernames);
 	cache.connectedUsers = clients.length; // all of the users are connected
 	
-	for (let i = 0; i < clients.length; i++) {
-		clients[i].socketRef.discussions.set(key, {cache, position: i});
-	}
-
-
-	// Send a message
-	const sentObject = JSON.stringify({
+	const sentObjectJSON = JSON.stringify({
 		type: 'meet',
 		usernames,
 		key
 	});
 
-	for (let i of clients) {
-		i.socketRef.ws.send(sentObject);
+	for (let i = 0; i < clients.length; i++) {
+		const username = clients[i].username;
+		const ref = userSockets.get(clients[i].username);
+		if (ref) {
+			ref.discussions.set(key, {cache, position: i});
+			ref.ws.send(sentObjectJSON);
+		} else {
+			let left = usernames.length - 1; // on ne compte pas `username`
+			let result = "";
+
+			for (let i = 0; i < usernames.length; i++) {
+				if (usernames[i] === username) continue; // on saute son propre nom
+
+				result += usernames[i];
+				left--;
+
+				if (left > 0) {
+					result += left === 1 ? " and " : ", ";
+				}
+			}
+
+			notifyFCM(
+				username,
+				"Research done!",
+				`${result} ${usernames.length > 2 ? "are" : "is"} also bored.`,
+				{}
+			);
+
+			const mso = new MissedSearchResult(username, usernames, key);
+
+			if (missedSearchResults.has(username)) {
+				missedSearchResults.get(username).push(mso);
+			} else {
+				missedSearchResults.set(username, [mso]);
+			}
+		}
 	}
 }
 
@@ -735,6 +816,11 @@ function deleteUserSessionToken(sessionToken) {
 	const s = userSessions.get(sessionToken);
 	if (!s) {
 		return;
+	}
+
+	
+	for (let sp of searchingClientsPools) {
+		sp.removeIfPresent(s.username);
 	}
 
 	clearTimeout(s.timeout);
@@ -1059,8 +1145,6 @@ app.post('/api/registerFCM', async (req, res) => {
 	const token = req.body.token;
 	const notif = await getNotifFCM(userSession.username);
 
-	console.log(notif);
-
 	if (notif.tokens.includes(token)) {
 		res.json({ok: true});
 		return;
@@ -1304,11 +1388,19 @@ wss.on('connection', async ws => {
 				}
 			}
 
+
+			const mso = MissedSearchResult.getAndRemove(__username__);
+
+			const missedSearchResults = mso ? 
+				mso.map(m => ({key: m.key, usernames: m.usernames})) :
+				null;
+
 			// Send response
 			send({
 				type: 'connect',
 				connected: true,
-				missedNotifications
+				missedNotifications,
+				missedSearchResults
 			});
 		},
 
@@ -1317,10 +1409,8 @@ wss.on('connection', async ws => {
 			const username = getUsername();
 
 			// Check if user is already in a pool
-			if (searchingClientsPools.some(s => s.isInside(username))) {
-				send({type: 'search_alreadyInside'});
-				return;
-			}
+			for (let i of searchingClientsPools)
+				i.removeUser(username);
 
 			let poolName = isAnonymousUsername(username) ? "everyone" : data.pool;
 			const pool = searchingClientsPools.find(i => i.name === poolName);
@@ -1338,7 +1428,6 @@ wss.on('connection', async ws => {
 			const score = await getUserScore(username);
 
 			const client = new SearchingClient(
-				socketRef,
 				username,
 				score,
 				data.blacklist
@@ -1451,8 +1540,11 @@ wss.on('connection', async ws => {
 			const {content, msgId} = data;
 			let discussion = null;
 			let message = null;
-			
-			
+
+			const author = getUsername();
+			if (!author)
+				throw new Error("Username of the author required");
+
 			const obj = socketRef.discussions.get(listenFor);
 			if (!obj)
 				throw new Error("Discussion cache not found");
@@ -1540,8 +1632,8 @@ wss.on('connection', async ws => {
 					notifyFCM(
 						username,
 						"New message",
-						username + " sent you a message",
-						{username, conv: listenFor}
+						author + " sent you a message",
+						{author, conv: listenFor}
 					);
 				}
 			}

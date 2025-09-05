@@ -1,19 +1,16 @@
-const ws = (() => {
-	let url;
-	
-	if (usingCapacitor) {
-		url = `${DOMAIN_SECURE ? 'wss' : 'ws'}://${DOMAIN}/ws`
-	} else {
-		url = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`
-	}
+/** @type WebSocket | null */
+let socket = null;
+let firstSocketConnection = true;
+let isSocketValid = false;
+let socketConnectResolvers = [];
 
-	return new WebSocket(url);
-})();
 
 const CURRENT_USERNAME_KEY = 'currentUsername';
 
 function send(data) {
-	ws.send(JSON.stringify(data));
+	openSocket().then(ws => {
+		ws.send(JSON.stringify(data));
+	}).catch(console.error); 
 }
 
 function generateRandomKey() {
@@ -542,7 +539,6 @@ const BODY = {
 
 function appendDiscussionList(contactMap) {
 	BODY.conversations.innerHTML = '';
-	BODY.messages.innerHTML = '';
 
 	// Sort contacts by lastMsgDate descending
 	const sorted = Array.from(contactMap.entries()).sort((a, b) => (b[1].lastMsgDate || 0) - (a[1].lastMsgDate || 0));
@@ -1018,81 +1014,11 @@ async function openKeyDiscussion(key, usernames) {
 
 
 
-// Connect web socket
-ws.onopen = async () => {
-	const sessionToken = localStorage.getItem('sessionToken');
-
-	let username;
-	let key;
-	let anonymous;
-
-	if (sessionToken) {
-		const object = await goFetch(
-			'/api/connectSocket',
-			{sessionToken},
-			"POST"
-		);
-
-		username = object.username;
-		if (!username) {
-			alert("You are not connected");
-			localStorage.removeItem('sessionToken');
-			gotoPage('login');
-			return;
-		}
-
-		anonymous = false;
-		key = object.key;
-		localStorage.setItem(CURRENT_USERNAME_KEY, username);
-
-	} else {
-		const object = await goFetch('/api/createAnonymousAccount');
-		username = object.username;
-		key = object.key;
-		anonymous = true;
-		localStorage.removeItem(CURRENT_USERNAME_KEY);
-	}
-
-
-	// Register username
-	__username__ = username;
-	document.getElementById('usernameDisplay').textContent = username;
-	database = new Database(username, anonymous);
-	appendDiscussionList(await database.getContactMap());
-
-	// Ask for missed notifications
-	let contacts = [];
-	for (let [_, contact] of (await database.getContactMap())) {
-		contacts.push({key: contact.key, users: contact.users});
-	}
-
-	// Open notification
-	const convToOpenStorage = "convToOpenAs_" + username;
-	const convToOpen = localStorage.getItem(convToOpenStorage);
-	if (convToOpen) {
-		localStorage.removeItem(convToOpenStorage);
-		openKeyDiscussion(convToOpen, null);
-	} else {
-		// Show
-		showMobileSidebar();
-	}
-
-
-
-	// Connect websocket
-	send({
-		type: 'connect',
-		username,
-		key,
-		contacts
-	});
-};
-
 
 
 
 const onmessage = {
-	connect(data) {
+	async connect(data) {
 		if (!data.connected) {
 			switch (data.error) {
 			case 'ticketNotFound':
@@ -1104,7 +1030,6 @@ const onmessage = {
 				break;
 			}
 
-			gotoPage('settings');
 			throw new Error("Identification failed: " + data.error);
 		}
 
@@ -1129,6 +1054,23 @@ const onmessage = {
 			if (div) {
 				BODY.conversations.insertBefore(div, BODY.conversations.firstChild);
 			}
+		}
+
+		// Handle missed search results
+		if (data.missedSearchResults) {
+			for (let mso of data.missedSearchResults) {
+				try {
+					await openKeyDiscussion(mso.key, mso.usernames);
+				} catch (e) {
+					console.error(e);
+				}
+			}
+		}
+
+		// Mark socket as valid
+		isSocketValid = true;
+		for (let resolve of socketConnectResolvers) {
+			resolve(socket);
 		}
 	},
 
@@ -1294,14 +1236,141 @@ const onmessage = {
 	}
 };
 
-ws.onmessage = async event => {
+
+
+function openSocket() {
+	// Return immediately if the socket is already open
+	if (isSocketValid) {
+		return new Promise(resolve => resolve(socket));
+	}
+
+	// If socket is connecting, wait for it
+	if (socket) {
+		return new Promise((resolve, reject) => {
+			socketConnectResolvers.push(resolve);
+		});
+	}
+
+	// Otherwise, create a new socket
+	let url;
+	if (usingCapacitor) {
+		url = `${DOMAIN_SECURE ? "wss" : "ws"}://${DOMAIN}/ws`;
+	} else {
+		url = `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/ws`;
+	}
+
+	socket = new WebSocket(url);
+
+
+	// Attach handlers
+	socket.onopen = socket_onopen;
+	socket.onmessage = socket_onmessage;
+	socket.onerror = (err) => console.error("WebSocket error:", err);
+
+	return new Promise((resolve, reject) => {
+		socketConnectResolvers.push(resolve);
+	});
+}
+
+
+
+function closeSocket() {
+	openSocket().then(() => {
+		socket.close();
+		socket = null;
+		isSocketValid = false;
+	}).catch(console.error);
+}
+
+
+
+async function socket_onopen() {
+	const sessionToken = localStorage.getItem('sessionToken');
+
+	let username;
+	let key;
+	let anonymous;
+
+	if (sessionToken) {
+		const object = await goFetch(
+			'/api/connectSocket',
+			{sessionToken},
+			"POST"
+		);
+
+		username = object.username;
+		if (!username) {
+			alert("You are not connected");
+			localStorage.removeItem('sessionToken');
+			gotoPage('login');
+			return;
+		}
+
+		anonymous = false;
+		key = object.key;
+		localStorage.setItem(CURRENT_USERNAME_KEY, username);
+
+	} else {
+		const object = await goFetch('/api/createAnonymousAccount');
+		username = object.username;
+		key = object.key;
+		anonymous = true;
+		localStorage.removeItem(CURRENT_USERNAME_KEY);
+	}
+
+
+	// Register username
+	__username__ = username;
+	document.getElementById('usernameDisplay').textContent = username;
+	database = new Database(username, anonymous);
+
+	if (firstSocketConnection)
+		BODY.messages.innerHTML = '';
+
+	appendDiscussionList(await database.getContactMap());
+
+	// Ask for missed notifications
+	let contacts = [];
+	for (let [_, contact] of (await database.getContactMap())) {
+		contacts.push({key: contact.key, users: contact.users});
+	}
+
+	// Open notification
+	if (firstSocketConnection) {
+		const convToOpenStorage = "convToOpenAs_" + username;
+		const convToOpen = localStorage.getItem(convToOpenStorage);
+		if (convToOpen) {
+			localStorage.removeItem(convToOpenStorage);
+			openKeyDiscussion(convToOpen, null);
+		} else {
+			// Show
+			showMobileSidebar();
+		}
+
+		firstSocketConnection = false;
+	}
+
+
+
+	// Connect websocket
+	socket.send(JSON.stringify({
+		type: 'connect',
+		username,
+		key,
+		contacts
+	}));
+}
+
+
+
+async function socket_onmessage(event) {
 	const data = JSON.parse(event.data);
 	const fn = (onmessage[data.type]);
 	if (!fn) {
 		console.log(data);
 		throw "Type not found";
 	}
-
+	
 	await fn(data);
 }
 
@@ -1354,6 +1423,8 @@ async function sendMessage(content) {
 
 
 function onAppResume() {
+	openSocket();	
+
 	if (currentContact) {
 		send({
 			type: 'listenFor',
@@ -1371,12 +1442,16 @@ function onAppResume() {
 }
 
 function onAppPause() {
-	if (currentContact) {
+	/*if (currentContact) {
 		send({
 			type: 'listenFor',
 			key: null
 		});
-	}
+	}*/
+
+	if (!__username__ || !isAnonymousUsername(__username__))
+		closeSocket();
+
 }
 
 
@@ -1616,6 +1691,9 @@ function openCurrentDB() {
 
 
 
+
+// Open socket
+openSocket();
 
 
 

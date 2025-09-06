@@ -105,6 +105,10 @@ button:focus {
   outline-offset: 2px;
 }
 
+.hidden {
+  display: none;
+}
+
 @media (min-width: 700px) {
   main {
     max-width: 700px;

@@ -1,14 +1,6 @@
-(async () => {
-	const data = await goFetch(
-		'/api/checkAuth',
-		{sessionToken: localStorage.getItem('sessionToken')},
-		"POST"
-	);
-
-	if (data.authenticated) {
-		gotoPage('app');
-	}
-})();
+if (localStorage.getItem('sessionToken')) {
+	gotoPage('app');
+}
 
 document.getElementById('tryBtn').onclick = () => {
 	gotoPage('app');

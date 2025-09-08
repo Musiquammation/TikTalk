@@ -568,7 +568,7 @@ class MissedSearchResult {
 		}
 
 		if (arr.length === 0) {
-			missedSearchResults.delete(key);
+			missedSearchResults.delete(this.username);
 		}
 	}
 
@@ -579,6 +579,8 @@ class MissedSearchResult {
 
 		for (let i of arr)
 			clearTimeout(i.timeout);
+
+		missedSearchResults.delete(username);
 
 		return arr;
 	}
@@ -1005,7 +1007,7 @@ app.post('/api/forgot-password', async (req, res) => {
 		resetCodes.set(user.email, { code, expires, timeout, userId: user.id, username: user.username, email: user.email });
 
 		await transporter.sendMail({
-			from: 'villagerstudioautomailer@gmail.com',
+			from: process.env.MAILER_USER,
 			to: user.email,
 			subject: 'TikTalk password reset',
 			html: `<div style=\"font-family:sans-serif;padding:2em;background:#f9f9f9;border-radius:8px;max-width:400px;margin:auto;\">

@@ -840,7 +840,7 @@ function updateSeenMark(mark) {
 			const bubble = container.children[i];
 			if (
 				bubble.classList.contains('me') &&
-				+bubble.getAttribute("data-date") <= mark
+				+bubble.getAttribute("data-date") < mark
 			) {
 				giveSeenMark(bubble);
 				return true;
@@ -1040,9 +1040,13 @@ const onmessage = {
 					continue;
 
 				(async () => {
-					contactDivs.get(key).setNotifNumber(
-						await database.increaseNotifNumber(key, missedCount)
-					)
+					const number = await database.increaseNotifNumber(key, missedCount);
+
+					if (currentContact && key == currentContact.key) {
+						contactDivs.get(key).resetNotifNumber();
+					} else {
+						contactDivs.get(key).setNotifNumber(number);
+					}
 				})();
 			}
 		}
@@ -1193,6 +1197,7 @@ const onmessage = {
 		const pending = pendingMessages.get(data.id);
 		if (pending) {
 			pending.div.classList.remove('pending');
+			pending.div.setAttribute("data-date", data.date);		
 			pendingMessages.delete(data.id);
 
 			database.changeMsgDate(currentContactId, pending.date, data.date);
@@ -1442,13 +1447,6 @@ function onAppResume() {
 }
 
 function onAppPause() {
-	/*if (currentContact) {
-		send({
-			type: 'listenFor',
-			key: null
-		});
-	}*/
-
 	if (!__username__ || !isAnonymousUsername(__username__))
 		closeSocket();
 
@@ -1459,10 +1457,26 @@ function onAppPause() {
 if (usingCapacitor) {
 	const { App, LocalNotifications } = Capacitor.Plugins;
 
+	// App pause/resume
 	App.addListener('resume', onAppResume);
 	App.addListener('pause', onAppPause);
 
+	App.addListener('backButton', e => {
+		e.preventDefault?.();
+		
+		if (currentContact) {
+			showMobileSidebar();
+			currentContact = null;
+			currentContactId = -1;
+			send({
+				type: 'listenFor',
+				key: null
+			});
+		}
+	});
 
+
+	// Notifications
 	askLocalNotifPerm().then(() => {
 		LocalNotifications.addListener(
 			'localNotificationActionPerformed',

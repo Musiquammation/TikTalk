@@ -58,7 +58,7 @@ let localNotifPerm = -1;
 let askLocalNotifPerm;
 
 if (usingCapacitor) {
-	const { FirebaseMessaging, PushNotifications, LocalNotifications } = Capacitor.Plugins;
+	const { FirebaseMessaging, PushNotifications, LocalNotifications, StatusBar } = Capacitor.Plugins;
 
 	PushNotifications.createChannel({
 		id: "default",
@@ -173,6 +173,8 @@ if (usingCapacitor) {
 
 
 	ensureToken();
+
+	StatusBar.setOverlaysWebView({ overlay: false });
 
 
 } else {

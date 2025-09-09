@@ -582,7 +582,6 @@ class MissedSearchResult {
 			clearTimeout(i.timeout);
 
 		missedSearchResults.delete(username);
-
 		return arr;
 	}
 }
@@ -1360,6 +1359,7 @@ wss.on('connection', async ws => {
 
 						// Create discussion cache
 						cache = new DiscussionCache(fullUsers);
+						socketRef.discussions.set(key, {cache, position});
 						discussionCaches.set(key, cache);
 					}
 	

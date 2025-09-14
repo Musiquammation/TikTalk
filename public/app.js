@@ -5,6 +5,13 @@ let isSocketValid = false;
 let socketConnectResolvers = [];
 
 
+const keyboardState = {
+    isVisible: false,
+    height: 0,
+    wasAtBottomBeforeKeyboard: false,
+    scrollTopBeforeKeyboard: 0
+};
+
 const CURRENT_USERNAME_KEY = 'currentUsername';
 
 function send(data) {
@@ -30,9 +37,73 @@ function isAnonymousUsername(username) {
 	return username.startsWith("anonymous_");
 }
 
-function isAtBottom(container, tolerance = 10) {
-  return container.scrollTop + container.clientHeight >= container.scrollHeight - tolerance;
+
+function isAtBottom(container, tolerance = 50) {
+    const scrollTop = Math.ceil(container.scrollTop);
+    const scrollHeight = container.scrollHeight;
+    const clientHeight = container.clientHeight;
+    
+    // Calcul standard
+    const standardCheck = scrollTop + clientHeight >= scrollHeight - tolerance;
+    
+    // Pour Capacitor avec clavier, on utilise une approche différente
+    if (usingCapacitor && keyboardState.isVisible) {
+        // Obtenir la hauteur visible réelle du viewport
+        const visualViewportHeight = window.visualViewport?.height || window.innerHeight;
+        const windowHeight = window.innerHeight;
+        
+        // Si le viewport visuel est plus petit que la fenêtre, le clavier est ouvert
+        const keyboardVisible = visualViewportHeight < windowHeight;
+        
+        if (keyboardVisible) {
+            // Calculer combien de contenu est caché en bas à cause du clavier
+            const hiddenHeight = windowHeight - visualViewportHeight;
+            
+            // Ajuster la vérification en tenant compte du contenu caché
+            const adjustedCheck = scrollTop + clientHeight >= scrollHeight - tolerance - hiddenHeight;
+            
+            console.log('Keyboard detection:', {
+                scrollTop,
+                clientHeight,
+                scrollHeight,
+                visualViewportHeight,
+                windowHeight,
+                hiddenHeight,
+                standardCheck,
+                adjustedCheck
+            });
+            
+            return adjustedCheck;
+        }
+    }
+    
+    return standardCheck;
 }
+
+// Version alternative plus simple qui se base sur la position relative
+function isAtBottomSimple(container, tolerance = 50) {
+    if (usingCapacitor && keyboardState.isVisible) {
+        // Quand le clavier est ouvert, on vérifie si on était en bas avant
+        // et si on n'a pas beaucoup scrollé depuis
+        if (keyboardState.wasAtBottomBeforeKeyboard) {
+            const currentScroll = container.scrollTop;
+            const savedScroll = keyboardState.scrollTopBeforeKeyboard || 0;
+            const scrollDifference = Math.abs(currentScroll - savedScroll);
+            
+            // Si on n'a pas scrollé de plus de 100px, on considère qu'on est toujours en bas
+            return scrollDifference <= 100;
+        }
+        return false;
+    }
+    
+    // Logique standard
+    const scrollTop = Math.ceil(container.scrollTop);
+    const scrollHeight = container.scrollHeight;
+    const clientHeight = container.clientHeight;
+    
+    return scrollTop + clientHeight >= scrollHeight - tolerance;
+}
+
 
 
 
@@ -68,9 +139,9 @@ class ContactDiv {
 
 
 class PendingMessage {
-	constructor(div, date) {
+	constructor(div, msg) {
 		this.div = div;
-		this.date = date;
+		this.msg = msg;
 	}
 }
 
@@ -455,44 +526,7 @@ class Database {
 		return {};
 	}
 
-	async changeMsgDate(contactId, oldDate, newDate) {
-		await this.openDB();
-
-		const contact = this.contacts.get(contactId);
-		if (!contact) {
-			throw new Error("Contact not found");
-		}
-
-		for (const blockId of contact.blocks) {
-			const block = await new Promise((resolve, reject) => {
-				const tx = this.db.transaction("blocks", "readwrite");
-				const store = tx.objectStore("blocks");
-				const req = store.get(blockId);
-				req.onsuccess = () => resolve(req.result);
-				req.onerror = e => reject(e.target.error);
-			});
-
-			if (!block) continue;
-
-			const msg = block.messages.find(m => m.date === oldDate);
-			if (msg) {
-				msg.date = newDate;
-
-				await new Promise((resolve, reject) => {
-					const tx = this.db.transaction("blocks", "readwrite");
-					const store = tx.objectStore("blocks");
-					const req = store.put({ ...block, id: blockId });
-					req.onsuccess = () => resolve();
-					req.onerror = e => reject(e.target.error);
-				});
-
-				await this._updateContactInDB(contactId, contact);
-				return;
-			}
-		}
-
-		throw new Error(`Message with date ${oldDate} not found in contact ${contactId}`);
-	}
+	
 }
 
 
@@ -641,9 +675,6 @@ async function showDiscussion(contact, contactId, discussionClickDiv) {
 		BODY.messages.appendChild(container);
 	}
 
-	// Handle scroll
-	scrollToBottom();
-
 
 	// Buttons
 	if (contact.users.length > 2 || isAnonymousUsername(__username__)) {
@@ -651,6 +682,10 @@ async function showDiscussion(contact, contactId, discussionClickDiv) {
 	} else {
 		BODY.reportBtn.classList.remove('hidden');
 	}
+
+
+	// Handle scroll
+	scrollToBottom();
 
 
 	// Send listenFor
@@ -728,12 +763,12 @@ function appendDiscussionBlock(messages, lastDate, container, users, pending = f
 		if (pending) {
 			const key = generateRandomKey();
 			generatedIds.push(key);
-			pendingMessages.set(key, new PendingMessage(bubble, msg.date));
+			pendingMessages.set(key, new PendingMessage(bubble, msg));
 		}
 	}
 
 	if (shouldScroll) {
-		BODY.messages.scrollTop = BODY.messages.scrollHeight;
+		scrollToBottom();
 	}
 
 	return generatedIds;
@@ -784,7 +819,9 @@ async function appendMessages(messages, pending = false) {
 		return;
 
 	// Update database
-	await database.pushMessageList(currentContactId, messages);
+	if (!pending) {
+		await database.pushMessageList(currentContactId, messages);
+	}
 
 	// Update display
 	const generatedIds = appendDiscussionBlock(
@@ -885,41 +922,38 @@ function stopSearchingAnim() {
 let updateTypingFlagsPointNumber = 0;
 let updateTypingFlagsInterval = 0;
 
-function updateTypingFlags() {
-	if (isAtBottom(BODY.messages)) {
-		scrollToBottom(true);
-	}
 
+function updateTypingFlags() {
+	const shouldScroll = isAtBottom(BODY.messages);
+	
 	clearInterval(updateTypingFlagsInterval);
 	BODY.isTyping.innerHTML = '';
 
-	let nobodyIsTyping;
+	let nobodyIsTyping = true;
 
 	if (typingFlags && currentContact) {
 		for (let i of typingFlags) {
 			if (i !== 0) {
-				nobodyIsTyping = true;
+				nobodyIsTyping = false;
 				break;
 			}
 		}
-
-		nobodyIsTyping = false;
-
-	} else {
-		nobodyIsTyping = true;
 	}
 
-	if (nobodyIsTyping)
+	if (nobodyIsTyping) {
 		return;
-	
+	}
 
 	const usernames = [];
-	for (let i = 0; i < currentContact.users.length; i++)
-		if (typingFlags[i] && currentContact.users[i] !== null)
+	for (let i = 0; i < currentContact.users.length; i++) {
+		if (typingFlags[i] && currentContact.users[i] !== null) {
 			usernames.push(currentContact.users[i]);
+		}
+	}
 		
-	if (usernames.length === 0)
+	if (usernames.length === 0) {
 		return;
+	}
 
 	if (usernames.length === 1) {
 		BODY.isTyping.innerHTML = `${usernames[0]} is typing<span id='isTypingAnim'></span>`;
@@ -936,7 +970,12 @@ function updateTypingFlags() {
 
 		document.getElementById("isTypingAnim").innerText = ".".repeat(updateTypingFlagsPointNumber);
 	}, 400);
+
+	if (shouldScroll) {
+		scrollToBottom();
+	}
 }
+
 
 
 function stopTypingPosition(position) {
@@ -1117,7 +1156,7 @@ const onmessage = {
 		stopTypingPosition(data.by);
 
 		if (shouldScroll) {
-			BODY.messages.scrollTop = BODY.messages.scrollHeight;
+			scrollToBottom();
 		}
 	},
 
@@ -1197,10 +1236,11 @@ const onmessage = {
 		const pending = pendingMessages.get(data.id);
 		if (pending) {
 			pending.div.classList.remove('pending');
-			pending.div.setAttribute("data-date", data.date);		
+			pending.div.setAttribute("data-date", data.date);
 			pendingMessages.delete(data.id);
 
-			database.changeMsgDate(currentContactId, pending.date, data.date);
+			// Add message to database
+			database.pushMessageList(currentContactId, [pending.msg]);
 		} else {
 			console.warn("Received message has been missed. Id was", data.id);
 		}
@@ -1513,17 +1553,16 @@ if (usingCapacitor) {
 BODY.isTyping.style.bottom = document.getElementById("inputBar").offsetHeight + "px";
 
 
-function scrollToBottom(smooth = false, maxTries = 10) {
-	let tries = 0;
-
-	setTimeout(() => {
-		BODY.messages.scrollTo({
-			top: BODY.messages.scrollHeight,
-			behavior: smooth ? "smooth" : "auto"
+function scrollToBottom(smooth = false, force = false) {
+	if (force || !keyboardState.isVisible || keyboardState.wasAtBottomBeforeKeyboard) {
+		requestAnimationFrame(() => {
+			BODY.messages.scrollTo({
+				top: BODY.messages.scrollHeight,
+				behavior: smooth ? "smooth" : "auto"
+			});
 		});
-	}, 25);
+	}
 }
-
 
 
 function showMobileSidebar() {
@@ -1556,8 +1595,11 @@ let isUserTyping = false;
 BODY.messageInput.onkeydown = e => {
 	if (e.key === "Enter") {
 		e.preventDefault();
-		sendMessage(BODY.messageInput.value.trim());
-		BODY.messageInput.value = "";
+		const message = BODY.messageInput.value.trim();
+		if (message) {
+			sendMessage(message);
+			BODY.messageInput.value = "";
+		}
 		clearTimeout(userTypingTimeout);
 		isUserTyping = false;
 		return;
@@ -1586,12 +1628,14 @@ BODY.messageInput.onkeydown = e => {
 	}, 3000);
 };
 
-
-
 BODY.sendBtn.onclick = () => {
-	sendMessage(BODY.messageInput.value.trim());
-	BODY.messageInput.value = "";
+	const message = BODY.messageInput.value.trim();
+	if (message) {
+		sendMessage(message);
+		BODY.messageInput.value = "";
+	}
 };
+
 
 
 BODY.searchBtn.onclick = () => {
@@ -1628,11 +1672,8 @@ BODY.reportBtn.onclick = () => {
 
 
 
-window.addEventListener("resize", () => {
-	if (isAtBottom(BODY.messages)) {
-		scrollToBottom();
-	}
-});
+
+
 
 document.getElementById('settingsBtn').onclick = () => {
 	gotoPage('settings');
@@ -1702,6 +1743,116 @@ function openCurrentDB() {
 		}, 200);
 	}
 })();
+
+
+
+
+
+
+
+// Handle resizing
+// Virtual keyboard management with Capacitor
+if (usingCapacitor) {
+    const { Keyboard } = Capacitor.Plugins;
+    
+    Keyboard.addListener('keyboardWillShow', info => {
+        console.log('Keyboard will show with height:', info.keyboardHeight);
+        
+        // Sauvegarder l'état avant ouverture
+        keyboardState.wasAtBottomBeforeKeyboard = isAtBottom(BODY.messages);
+        keyboardState.scrollTopBeforeKeyboard = BODY.messages.scrollTop;
+        keyboardState.isVisible = true;
+        keyboardState.height = info.keyboardHeight;
+        
+        console.log('Saved state:', {
+            wasAtBottom: keyboardState.wasAtBottomBeforeKeyboard,
+            scrollTop: keyboardState.scrollTopBeforeKeyboard
+        });
+    });
+
+    Keyboard.addListener('keyboardDidShow', info => {
+        console.log('Keyboard did show');
+        
+        // Scroller seulement si on était en bas
+        if (keyboardState.wasAtBottomBeforeKeyboard) {
+            console.log('Scrolling to bottom after keyboard show');
+            setTimeout(() => {
+                scrollToBottom(false, true);
+            }, 100);
+        }
+    });
+
+    Keyboard.addListener('keyboardWillHide', () => {
+        console.log('Keyboard will hide');
+    });
+
+    Keyboard.addListener('keyboardDidHide', () => {
+        console.log('Keyboard did hide');
+        
+        // Vérifier si on était en bas avec le clavier
+        const wasAtBottomWithKeyboard = isAtBottomSimple(BODY.messages);
+        
+        // Réinitialiser l'état
+        keyboardState.isVisible = false;
+        keyboardState.height = 0;
+        
+        // Scroller si nécessaire
+        if (wasAtBottomWithKeyboard) {
+            console.log('Scrolling to bottom after keyboard hide');
+            setTimeout(() => {
+                scrollToBottom(false, true);
+            }, 150);
+        }
+        
+        // Reset
+        keyboardState.wasAtBottomBeforeKeyboard = false;
+        keyboardState.scrollTopBeforeKeyboard = 0;
+    });
+
+} else {
+	// Version web (inchangée)
+	BODY.messageInput.addEventListener('focus', () => {
+		setTimeout(() => {
+			if (isAtBottom(BODY.messages)) {
+				scrollToBottom();
+			}
+		}, 600);
+	});
+
+	BODY.messageInput.addEventListener('blur', () => {
+		setTimeout(() => {
+			if (isAtBottom(BODY.messages)) {
+				scrollToBottom();
+			}
+		}, 300);
+	});
+
+	if (window.visualViewport) {
+		let viewportTimeout;
+		window.visualViewport.addEventListener('resize', () => {
+			clearTimeout(viewportTimeout);
+			viewportTimeout = setTimeout(() => {
+				if (isAtBottom(BODY.messages)) {
+					scrollToBottom();
+				}
+			}, 100);
+		});
+	}
+}
+
+// Common resize handler (for screen rotations, etc.)
+window.addEventListener("resize", () => {
+	clearTimeout(window.resizeTimeout);
+	window.resizeTimeout = setTimeout(() => {
+		if (isAtBottom(BODY.messages)) {
+			scrollToBottom();
+		}
+	}, 100);
+});
+
+
+
+
 
 
 

@@ -174,6 +174,7 @@ if (usingCapacitor) {
 
 	ensureToken();
 
+	StatusBar.show();
 	StatusBar.setOverlaysWebView({ overlay: false });
 
 

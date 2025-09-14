@@ -508,9 +508,9 @@ class NotifFCM {
 
 		// Clear memory
 		this.timeout = setTimeout(() => {
-			for (const [key, value] of userSessions) {
+			for (const [key, value] of notifsFCM) {
 				if (value === this) {
-					userSessions.delete(key);
+					notifsFCM.delete(key);
 				}
 			}
 		}, NotifFCM.LIFETIME);
@@ -744,6 +744,11 @@ function unregisterFCM(username, token) {
 		if (index > 0) {
 			notif.tokens.splice(index, 1);
 		}
+
+		if (notif.tokens.length === 0) {
+			clearTimeout(notif.timeout);
+			notifsFCM.delete(username);
+		}
 	}
 
 
@@ -820,15 +825,35 @@ function deleteUserSessionToken(sessionToken) {
 		return;
 	}
 
-	
+	const username = s.username;
+
+	// Remove from pool
 	for (let sp of searchingClientsPools) {
-		sp.removeIfPresent(s.username);
+		sp.removeIfPresent(username);
 	}
 
+	// Unregister fcm token (for notifications)
+	{
+		const notif = notifsFCM.get(username);
+		if (notif) {
+			clearTimeout(notif.timeout);
+			notifsFCM.delete(username);
+		}
+	}
+	
+
+	pool.query(
+		`DELETE FROM tiktalk_tokensFCM
+		WHERE username = $1`,
+		[username]
+	);
+
+
+	// Delete session
 	clearTimeout(s.timeout);
 	userSessions.delete(sessionToken);
 
-
+	// Delete token session
 	pool.query(`DELETE FROM tiktalk_tokensSES WHERE token=$1;`,
 		[sessionToken]
 	);

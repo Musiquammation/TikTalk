@@ -6,10 +6,10 @@ let socketConnectResolvers = [];
 
 
 const keyboardState = {
-    isVisible: false,
-    height: 0,
-    wasAtBottomBeforeKeyboard: false,
-    scrollTopBeforeKeyboard: 0
+	isVisible: false,
+	height: 0,
+	wasAtBottomBeforeKeyboard: false,
+	scrollTopBeforeKeyboard: 0
 };
 
 const CURRENT_USERNAME_KEY = 'currentUsername';
@@ -39,69 +39,69 @@ function isAnonymousUsername(username) {
 
 
 function isAtBottom(container, tolerance = 50) {
-    const scrollTop = Math.ceil(container.scrollTop);
-    const scrollHeight = container.scrollHeight;
-    const clientHeight = container.clientHeight;
-    
-    // Calcul standard
-    const standardCheck = scrollTop + clientHeight >= scrollHeight - tolerance;
-    
-    // Pour Capacitor avec clavier, on utilise une approche différente
-    if (usingCapacitor && keyboardState.isVisible) {
-        // Obtenir la hauteur visible réelle du viewport
-        const visualViewportHeight = window.visualViewport?.height || window.innerHeight;
-        const windowHeight = window.innerHeight;
-        
-        // Si le viewport visuel est plus petit que la fenêtre, le clavier est ouvert
-        const keyboardVisible = visualViewportHeight < windowHeight;
-        
-        if (keyboardVisible) {
-            // Calculer combien de contenu est caché en bas à cause du clavier
-            const hiddenHeight = windowHeight - visualViewportHeight;
-            
-            // Ajuster la vérification en tenant compte du contenu caché
-            const adjustedCheck = scrollTop + clientHeight >= scrollHeight - tolerance - hiddenHeight;
-            
-            console.log('Keyboard detection:', {
-                scrollTop,
-                clientHeight,
-                scrollHeight,
-                visualViewportHeight,
-                windowHeight,
-                hiddenHeight,
-                standardCheck,
-                adjustedCheck
-            });
-            
-            return adjustedCheck;
-        }
-    }
-    
-    return standardCheck;
+	const scrollTop = Math.ceil(container.scrollTop);
+	const scrollHeight = container.scrollHeight;
+	const clientHeight = container.clientHeight;
+	
+	// Calcul standard
+	const standardCheck = scrollTop + clientHeight >= scrollHeight - tolerance;
+	
+	// Pour Capacitor avec clavier, on utilise une approche différente
+	if (usingCapacitor && keyboardState.isVisible) {
+		// Obtenir la hauteur visible réelle du viewport
+		const visualViewportHeight = window.visualViewport?.height || window.innerHeight;
+		const windowHeight = window.innerHeight;
+		
+		// Si le viewport visuel est plus petit que la fenêtre, le clavier est ouvert
+		const keyboardVisible = visualViewportHeight < windowHeight;
+		
+		if (keyboardVisible) {
+			// Calculer combien de contenu est caché en bas à cause du clavier
+			const hiddenHeight = windowHeight - visualViewportHeight;
+			
+			// Ajuster la vérification en tenant compte du contenu caché
+			const adjustedCheck = scrollTop + clientHeight >= scrollHeight - tolerance - hiddenHeight;
+			
+			console.log('Keyboard detection:', {
+				scrollTop,
+				clientHeight,
+				scrollHeight,
+				visualViewportHeight,
+				windowHeight,
+				hiddenHeight,
+				standardCheck,
+				adjustedCheck
+			});
+			
+			return adjustedCheck;
+		}
+	}
+	
+	return standardCheck;
 }
 
 // Version alternative plus simple qui se base sur la position relative
 function isAtBottomSimple(container, tolerance = 50) {
-    if (usingCapacitor && keyboardState.isVisible) {
-        // Quand le clavier est ouvert, on vérifie si on était en bas avant
-        // et si on n'a pas beaucoup scrollé depuis
-        if (keyboardState.wasAtBottomBeforeKeyboard) {
-            const currentScroll = container.scrollTop;
-            const savedScroll = keyboardState.scrollTopBeforeKeyboard || 0;
-            const scrollDifference = Math.abs(currentScroll - savedScroll);
-            
-            // Si on n'a pas scrollé de plus de 100px, on considère qu'on est toujours en bas
-            return scrollDifference <= 100;
-        }
-        return false;
-    }
-    
-    // Logique standard
-    const scrollTop = Math.ceil(container.scrollTop);
-    const scrollHeight = container.scrollHeight;
-    const clientHeight = container.clientHeight;
-    
-    return scrollTop + clientHeight >= scrollHeight - tolerance;
+	if (usingCapacitor && keyboardState.isVisible) {
+		// Quand le clavier est ouvert, on vérifie si on était en bas avant
+		// et si on n'a pas beaucoup scrollé depuis
+		if (keyboardState.wasAtBottomBeforeKeyboard) {
+			const currentScroll = container.scrollTop;
+			const savedScroll = keyboardState.scrollTopBeforeKeyboard || 0;
+			const scrollDifference = Math.abs(currentScroll - savedScroll);
+			
+			// Si on n'a pas scrollé de plus de 100px, on considère qu'on est toujours en bas
+			return scrollDifference <= 100;
+		}
+		return false;
+	}
+	
+	// Logique standard
+	const scrollTop = Math.ceil(container.scrollTop);
+	const scrollHeight = container.scrollHeight;
+	const clientHeight = container.clientHeight;
+	
+	return scrollTop + clientHeight >= scrollHeight - tolerance;
 }
 
 
@@ -162,6 +162,11 @@ const contactDivs = new Map();
 
 
 function setNotifBadge(div, number) {
+	if (number == 0) {
+		resetNotifBadge(div);
+		return;
+	}
+
 	if (number > 9) {
 		number = '+9';
 	}
@@ -1384,6 +1389,7 @@ async function socket_onopen() {
 	if (firstSocketConnection) {
 		const convToOpenStorage = "convToOpenAs_" + username;
 		const convToOpen = localStorage.getItem(convToOpenStorage);
+
 		if (convToOpen) {
 			localStorage.removeItem(convToOpenStorage);
 			openKeyDiscussion(convToOpen, null);
@@ -1554,15 +1560,23 @@ BODY.isTyping.style.bottom = document.getElementById("inputBar").offsetHeight + 
 
 
 function scrollToBottom(smooth = false, force = false) {
-	if (force || !keyboardState.isVisible || keyboardState.wasAtBottomBeforeKeyboard) {
-		requestAnimationFrame(() => {
-			BODY.messages.scrollTo({
-				top: BODY.messages.scrollHeight,
-				behavior: smooth ? "smooth" : "auto"
-			});
-		});
-	}
+    if (force || !keyboardState.isVisible || keyboardState.wasAtBottomBeforeKeyboard) {
+        requestAnimationFrame(() => {
+            const container = BODY.messages;
+            const targetScroll = container.scrollHeight - container.clientHeight;
+            
+            if (smooth) {
+                container.scrollTo({
+                    top: targetScroll,
+                    behavior: "smooth"
+                });
+            } else {
+                container.scrollTop = targetScroll;
+            }
+        });
+    }
 }
+
 
 
 function showMobileSidebar() {
@@ -1755,14 +1769,23 @@ function openCurrentDB() {
 if (usingCapacitor) {
     const { Keyboard } = Capacitor.Plugins;
     
+    // Add Capacitor class to body for CSS targeting
+    document.body.classList.add('capacitor');
+    
     Keyboard.addListener('keyboardWillShow', info => {
         console.log('Keyboard will show with height:', info.keyboardHeight);
         
-        // Sauvegarder l'état avant ouverture
-        keyboardState.wasAtBottomBeforeKeyboard = isAtBottom(BODY.messages);
+        // Add keyboard-open class for CSS targeting
+        document.body.classList.add('keyboard-open');
+        
+        // Save state before keyboard opens
+        keyboardState.wasAtBottomBeforeKeyboard = isAtBottom(BODY.messages, 100);
         keyboardState.scrollTopBeforeKeyboard = BODY.messages.scrollTop;
         keyboardState.isVisible = true;
         keyboardState.height = info.keyboardHeight;
+        
+        // Prevent any unwanted scrolling during transition
+        BODY.messages.style.overflowY = 'hidden';
         
         console.log('Saved state:', {
             wasAtBottom: keyboardState.wasAtBottomBeforeKeyboard,
@@ -1773,71 +1796,114 @@ if (usingCapacitor) {
     Keyboard.addListener('keyboardDidShow', info => {
         console.log('Keyboard did show');
         
-        // Scroller seulement si on était en bas
+        // Re-enable scrolling
+        BODY.messages.style.overflowY = 'auto';
+        
+        // Adjust the container height to account for keyboard
+        const keyboardHeight = info.keyboardHeight || keyboardState.height;
+        const newHeight = window.innerHeight - keyboardHeight;
+        
+        // Apply the height adjustment
+        document.documentElement.style.setProperty('--keyboard-height', keyboardHeight + 'px');
+        document.documentElement.style.setProperty('--available-height', newHeight + 'px');
+        
+        // Scroll to bottom if we were at bottom before
         if (keyboardState.wasAtBottomBeforeKeyboard) {
             console.log('Scrolling to bottom after keyboard show');
+            setTimeout(() => {
+                scrollToBottom(false, true);
+            }, 50);
+        }
+    });
+
+    Keyboard.addListener('keyboardWillHide', () => {
+        console.log('Keyboard will hide');
+        
+        // Prevent scrolling during transition
+        BODY.messages.style.overflowY = 'hidden';
+        
+        // Remove keyboard-open class
+        document.body.classList.remove('keyboard-open');
+    });
+
+    Keyboard.addListener('keyboardDidHide', () => {
+        console.log('Keyboard did hide');
+        
+        // Re-enable scrolling
+        BODY.messages.style.overflowY = 'auto';
+        
+        // Reset CSS custom properties
+        document.documentElement.style.removeProperty('--keyboard-height');
+        document.documentElement.style.removeProperty('--available-height');
+        
+        // Check if we were at bottom with keyboard
+        const wasAtBottomWithKeyboard = keyboardState.wasAtBottomBeforeKeyboard;
+        
+        // Reset keyboard state
+        keyboardState.isVisible = false;
+        keyboardState.height = 0;
+        keyboardState.wasAtBottomBeforeKeyboard = false;
+        keyboardState.scrollTopBeforeKeyboard = 0;
+        
+        // Scroll to bottom if needed
+        if (wasAtBottomWithKeyboard) {
+            console.log('Scrolling to bottom after keyboard hide');
             setTimeout(() => {
                 scrollToBottom(false, true);
             }, 100);
         }
     });
 
-    Keyboard.addListener('keyboardWillHide', () => {
-        console.log('Keyboard will hide');
-    });
-
-    Keyboard.addListener('keyboardDidHide', () => {
-        console.log('Keyboard did hide');
-        
-        // Vérifier si on était en bas avec le clavier
-        const wasAtBottomWithKeyboard = isAtBottomSimple(BODY.messages);
-        
-        // Réinitialiser l'état
-        keyboardState.isVisible = false;
-        keyboardState.height = 0;
-        
-        // Scroller si nécessaire
-        if (wasAtBottomWithKeyboard) {
-            console.log('Scrolling to bottom after keyboard hide');
-            setTimeout(() => {
-                scrollToBottom(false, true);
-            }, 150);
+    // Enhanced scroll to bottom function for Capacitor
+    const originalScrollToBottom = scrollToBottom;
+    scrollToBottom = function(smooth = false, force = false) {
+        if (keyboardState.isVisible) {
+            // When keyboard is visible, calculate available height
+            const availableHeight = window.innerHeight - keyboardState.height;
+            const inputBarHeight = document.getElementById("inputBar").offsetHeight;
+            const maxScrollTop = BODY.messages.scrollHeight - availableHeight + inputBarHeight + 20;
+            
+            requestAnimationFrame(() => {
+                BODY.messages.scrollTo({
+                    top: maxScrollTop,
+                    behavior: smooth ? "smooth" : "auto"
+                });
+            });
+        } else {
+            // Use original function when keyboard is hidden
+            originalScrollToBottom(smooth, force);
         }
-        
-        // Reset
-        keyboardState.wasAtBottomBeforeKeyboard = false;
-        keyboardState.scrollTopBeforeKeyboard = 0;
-    });
+    };
 
 } else {
-	// Version web (inchangée)
-	BODY.messageInput.addEventListener('focus', () => {
-		setTimeout(() => {
-			if (isAtBottom(BODY.messages)) {
-				scrollToBottom();
-			}
-		}, 600);
-	});
+    // Web version (unchanged)
+    BODY.messageInput.addEventListener('focus', () => {
+        setTimeout(() => {
+            if (isAtBottom(BODY.messages)) {
+                scrollToBottom();
+            }
+        }, 600);
+    });
 
-	BODY.messageInput.addEventListener('blur', () => {
-		setTimeout(() => {
-			if (isAtBottom(BODY.messages)) {
-				scrollToBottom();
-			}
-		}, 300);
-	});
+    BODY.messageInput.addEventListener('blur', () => {
+        setTimeout(() => {
+            if (isAtBottom(BODY.messages)) {
+                scrollToBottom();
+            }
+        }, 300);
+    });
 
-	if (window.visualViewport) {
-		let viewportTimeout;
-		window.visualViewport.addEventListener('resize', () => {
-			clearTimeout(viewportTimeout);
-			viewportTimeout = setTimeout(() => {
-				if (isAtBottom(BODY.messages)) {
-					scrollToBottom();
-				}
-			}, 100);
-		});
-	}
+    if (window.visualViewport) {
+        let viewportTimeout;
+        window.visualViewport.addEventListener('resize', () => {
+            clearTimeout(viewportTimeout);
+            viewportTimeout = setTimeout(() => {
+                if (isAtBottom(BODY.messages)) {
+                    scrollToBottom();
+                }
+            }, 100);
+        });
+    }
 }
 
 // Common resize handler (for screen rotations, etc.)

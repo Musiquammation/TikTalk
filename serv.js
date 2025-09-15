@@ -843,8 +843,7 @@ function deleteUserSessionToken(sessionToken) {
 	
 
 	pool.query(
-		`DELETE FROM tiktalk_tokensFCM
-		WHERE username = $1`,
+		`DELETE FROM tiktalk_tokensFCM WHERE username = $1;`,
 		[username]
 	);
 

@@ -1,6 +1,5 @@
 @import url("colors.css");
 
-
 body {
 	margin: 0;
 	font-family: Arial, sans-serif;
@@ -19,16 +18,13 @@ body {
 	box-sizing: border-box;
 }
 
-
 #container {
 	display: flex;
 	width: 100vw;
-	height: 100dvh; /* ✅ corrigé */
+	height: 100dvh;
 	background: var(--color-bg);
-	overflow: hidden; /* ✅ bloque scroll parasite */
+	overflow: hidden;
 }
-
-
 
 #sidebar {
 	width: 300px;
@@ -77,7 +73,6 @@ body {
 	background: var(--color-danger);
 	color: white;;
 }
-
 
 .sidebarContainer {
 	display: flex;
@@ -144,13 +139,11 @@ body {
 	min-height: 0;
 }
 
-
 #inputBar {
 	display: flex;
 	border-top: 1px solid var(--color-border);
 	padding: 8px;
 	background: var(--color-bg);
-
 	padding-bottom: calc(8px + env(safe-area-inset-bottom));
 }
 
@@ -180,7 +173,6 @@ body {
 	margin-top: 1rem;
 }
 
-
 /* Amélioration contraste #messageInput */
 #messageInput {
 	flex: 1;
@@ -201,7 +193,6 @@ body {
 #messageInput::placeholder {
 	color: var(--color-text-muted);
 }
-
 
 .conversation {
 	position: relative;
@@ -253,7 +244,6 @@ body {
   color: var(--conv-btn-text);
 }
 
-
 #connectBtn {
 	color: #fff;
 	background: var(--color-danger);
@@ -281,7 +271,6 @@ body {
 	background: #ffe0e0;
 	cursor: pointer;
 }
-
 
 .svgContainer {
 	display: flex;
@@ -328,7 +317,6 @@ body {
 	color: var(--color-bubble-other-text);
 }
 
-
 .message-bubble.me {
 	background: var(--color-bubble-me);
 	color: var(--color-bubble-me-text);
@@ -360,14 +348,13 @@ body {
 }
 
 .message-bubble.me .message-time {
-	color: rgba(255, 255, 255, 0.8); /* meilleure lisibilité sur fond bleu */
+	color: rgba(255, 255, 255, 0.8);
 }
 
 .date-separator {
 	color: var(--color-date-separator-text);
 	background: var(--color-date-separator-bg);
 	border: 1px solid var(--color-border);
-
 	text-align: center;
 	margin: 18px 0 10px 0;
 	font-size: 0.98em;
@@ -395,7 +382,6 @@ body {
 	color: var(--color-seen-label-me);
 }
 
-
 .message-bubble.me.pending {
 	animation: pendingEffect 1s forwards;
 }
@@ -421,14 +407,17 @@ body {
   color: var(--color-text-muted);
   font-style: italic;
   padding: 4px 0;
-  background: transparent; /* pas de fond pour ne pas masquer le chat */
-  pointer-events: none; /* évite de bloquer le clic */
+  background: transparent;
+  pointer-events: none;
 }
 
-
+/* Mobile-specific fixes */
 @media (max-width: 700px) {
+	/* Fix container height for mobile */
 	#container {
 		flex-direction: column;
+		height: 100vh; /* Use vh for better keyboard compatibility */
+		max-height: 100vh;
 	}
 
 	#sidebar {
@@ -444,14 +433,61 @@ body {
 		transform: translateX(-100%);
 		box-shadow: 2px 0 8px rgba(0,0,0,0.08);
 	}
+	
 	#sidebar.mobile-visible {
 		transform: translateX(0);
 	}
+	
+	/* Main content area adjustments */
 	#main {
 		flex: 1;
 		margin-left: 0;
 		background: var(--color-bg);
+		display: flex;
+		flex-direction: column;
+		height: 100vh;
+		max-height: 100vh;
+		min-height: 0;
 	}
+	
+	/* Messages container should flex properly */
+	#messages {
+		flex: 1;
+		padding: 16px;
+		overflow-y: auto;
+		min-height: 0;
+		/* Prevent the messages area from expanding beyond viewport */
+		max-height: calc(100vh - 120px); /* Adjust based on your header/input heights */
+	}
+
+	/* Input bar positioning fixes */
+	#inputBar {
+		display: flex;
+		border-top: 1px solid var(--color-border);
+		padding: 8px;
+		background: var(--color-bg);
+		position: relative;
+		bottom: 0;
+		/* Default padding with safe area */
+		padding-bottom: calc(8px + env(safe-area-inset-bottom));
+		flex-shrink: 0; /* Prevent shrinking */
+	}
+
+	/* When keyboard is visible, remove safe area padding */
+	body.keyboard-visible #inputBar {
+		padding-bottom: 8px;
+	}
+
+	/* Adjust main container when keyboard is visible */
+	body.keyboard-visible #main {
+		height: calc(100vh - var(--keyboard-height, 0px));
+		max-height: calc(100vh - var(--keyboard-height, 0px));
+	}
+
+	body.keyboard-visible #messages {
+		max-height: calc(100vh - var(--keyboard-height, 0px) - 120px);
+	}
+
 	#backBtn {
 		display: inline-block;
 		margin-right: 10px;
@@ -471,8 +507,30 @@ body {
 		font-size: 0.98rem;
 		padding: 8px 10px 5px 10px;
 	}
+
+	/* Fix for the typing indicator positioning on mobile */
+	#isTyping {
+		position: absolute;
+		bottom: 60px; /* Adjust this value based on your input bar height */
+		left: 16px;
+		right: 16px;
+		width: auto;
+		text-align: left;
+		color: var(--color-text-muted);
+		font-style: italic;
+		padding: 4px 0;
+		background: transparent;
+		pointer-events: none;
+		z-index: 1;
+	}
+
+	/* When keyboard is visible, adjust typing indicator */
+	body.keyboard-visible #isTyping {
+		bottom: 60px; /* Keep consistent positioning */
+	}
 }
 
+/* Desktop styles */
 @media (min-width: 701px) {
 	#sidebar {
 		transform: none;
@@ -486,4 +544,31 @@ body {
 	}
 }
 
+/* Additional fix for viewport units on mobile with keyboard support */
+@supports (height: 100dvh) {
+	@media (max-width: 700px) {
+		/* Use dvh for devices that support it, but only when keyboard is not visible */
+		body:not(.keyboard-visible) #container {
+			height: 100dvh;
+			max-height: 100dvh;
+		}
+		
+		body:not(.keyboard-visible) #main {
+			height: 100dvh;
+			max-height: 100dvh;
+		}
+	}
+}
 
+/* Safe area adjustments for devices with notches/safe areas */
+@media (max-width: 700px) {
+	/* Ensure safe areas are respected when keyboard is not visible */
+	body:not(.keyboard-visible) {
+		padding-bottom: env(safe-area-inset-bottom);
+	}
+
+	/* Remove safe area bottom padding when keyboard is visible */
+	body.keyboard-visible {
+		padding-bottom: 0;
+	}
+}

@@ -58,7 +58,13 @@ let localNotifPerm = -1;
 let askLocalNotifPerm;
 
 if (usingCapacitor) {
-	const { FirebaseMessaging, PushNotifications, LocalNotifications, StatusBar } = Capacitor.Plugins;
+	const {
+		FirebaseMessaging,
+		PushNotifications,
+		LocalNotifications,
+		StatusBar,
+		Device
+	} = Capacitor.Plugins;
 
 	PushNotifications.createChannel({
 		id: "default",
@@ -119,7 +125,7 @@ if (usingCapacitor) {
 	}
 
 	// Écoute des notifs reçues en foreground
-	FirebaseMessaging.addListener("notificationReceived", async notification => {
+	async function onNotificationReceived(notification) {
 		try {
 			await askLocalNotifPerm();
 			const notif = notification.notification;
@@ -138,13 +144,13 @@ if (usingCapacitor) {
 		} catch (e) {}
 
 		console.log("Notification recue:", notification);
-	});
+	}
 
 	// Écoute quand l’utilisateur clique sur une notif
-	FirebaseMessaging.addListener("notificationActionPerformed", notification => {
+	function onNotificationActionPerformed(notification) {
 		const data = notification.notification.data;
-		if (data.username && data.conv) {
-			localStorage.setItem("convToOpenAs_" + data.username, data.conv);
+		if (data.conv) {
+			localStorage.setItem("convToOpenAs_" + localStorage.getItem('currentUsername'), data.conv);
 			return;
 		}
 
@@ -152,7 +158,13 @@ if (usingCapacitor) {
 			gotoPage('app');
 			return;
 		}
-	});
+	}
+
+
+	FirebaseMessaging.addListener("pushNotificationReceived", onNotificationReceived);
+	FirebaseMessaging.addListener("notificationReceived", onNotificationReceived);
+	FirebaseMessaging.addListener("pushNotificationActionPerformed", onNotificationActionPerformed);
+	FirebaseMessaging.addListener("notificationActionPerformed", onNotificationActionPerformed);
 
 
 
@@ -161,7 +173,7 @@ if (usingCapacitor) {
 			'localNotificationActionPerformed',
 			notif => {
 				localStorage.setItem(
-					"convToOpenAs_" + notif.notification.extra.username,
+					"convToOpenAs_" + localStorage.getItem('currentUsername'),
 					notif.notification.extra.conv
 				);
 
@@ -174,8 +186,7 @@ if (usingCapacitor) {
 
 	ensureToken();
 
-	StatusBar.show();
-	StatusBar.setOverlaysWebView({ overlay: false });
+
 
 
 } else {

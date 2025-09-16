@@ -667,7 +667,7 @@ function joinClients(clients) {
 	const usernames = clients.map(client => client.username);
 	const key = hashStrings64(usernames);
 	const cache = new DiscussionCache(usernames);
-	cache.connectedUsers = clients.length; // all of the users are connected
+	let connectedUsers = 0;
 	
 	const sentObjectJSON = JSON.stringify({
 		type: 'meet',
@@ -681,6 +681,8 @@ function joinClients(clients) {
 		if (ref) {
 			ref.discussions.set(key, {cache, position: i});
 			ref.ws.send(sentObjectJSON);
+			connectedUsers++;
+
 		} else {
 			let left = usernames.length - 1; // on ne compte pas `username`
 			let result = "";
@@ -711,6 +713,11 @@ function joinClients(clients) {
 				missedSearchResults.set(username, [mso]);
 			}
 		}
+	}
+
+	if (connectedUsers) {
+		cache.connectedUsers = connectedUsers;
+		discussionCaches.set(key, cache);
 	}
 }
 
@@ -1346,50 +1353,54 @@ wss.on('connection', async ws => {
 			userSockets.set(__username__, socketRef);
 			
 
+			function handleDiscussionCache(users, key) {
+				let cache = discussionCaches.get(key);
+				if (cache) {
+					position = cache.users.indexOf(__username__);
+					if (position < 0) {
+						throw new Error("User not present in DiscussionCache users");
+					}
+
+				} else {
+					position = -1;
+					const fullUsers = [];
+					for (let i = 0; i < users.length; i++) {
+						if (users[i] === null) {
+							position = i;
+							fullUsers.push(__username__);
+						} else {
+							if (position < 0 && users[i] === __username__)
+								position = i;
+							
+							fullUsers.push(users[i]);
+						}
+					}
+
+					if (position < 0) {
+						throw new Error("User not present in DiscussionCache users");
+					}
+
+					// Check if (key, fullUsers) is a valid couple
+					if (key != hashStrings64(fullUsers)) {
+						throw new Error("Illegal (key, fullUsers) combinaison");
+					}
+
+					// Create discussion cache
+					cache = new DiscussionCache(fullUsers);
+					socketRef.discussions.set(key, {cache, position});
+					discussionCaches.set(key, cache);
+				}
+
+				cache.connectedUsers++;
+				socketRef.discussions.set(key, {cache, position});
+			}
 
 			// Collect missed notifications
 			// Also, let's create/join discussionCaches
 			let missedNotifications = [];
 			for (let {users, key} of data.contacts) {
 				// Create/Join a discussion cache
-				{
-					let cache = discussionCaches.get(key);
-					if (cache) {
-						position = cache.users.indexOf(__username__);
-						if (position < 0) {
-							throw new Error("User not present in DiscussionCache users");
-						}
-
-					} else {
-						position = -1;
-						const fullUsers = [];
-						for (let i = 0; i < users.length; i++) {
-							if (users[i] === null) {
-								position = i;
-								fullUsers.push(__username__);
-							} else {
-								fullUsers.push(users[i]);
-							}
-						}
-
-						if (position < 0) {
-							throw new Error("User not present in DiscussionCache users");
-						}
-
-						// Check if (key, fullUsers) is a valid couple
-						if (key != hashStrings64(fullUsers)) {
-							throw new Error("Illegal (key, fullUsers) combinaison");
-						}
-
-						// Create discussion cache
-						cache = new DiscussionCache(fullUsers);
-						socketRef.discussions.set(key, {cache, position});
-						discussionCaches.set(key, cache);
-					}
-	
-					cache.connectedUsers++;
-					socketRef.discussions.set(key, {cache, position});
-				}
+				handleDiscussionCache(users, key);
 
 				
 				// Collect missed notifications
@@ -1418,9 +1429,21 @@ wss.on('connection', async ws => {
 
 			const mso = MissedSearchResult.getAndRemove(__username__);
 
-			const missedSearchResults = mso ? 
-				mso.map(m => ({key: m.key, usernames: m.usernames})) :
-				null;
+			let missedSearchResults;
+			
+			if (mso) {
+				missedSearchResults = mso.map(
+					m => ({key: m.key, usernames: m.usernames})
+				);
+
+				// Load caches
+				for (let {usernames, key} of missedSearchResults) {
+					handleDiscussionCache(usernames, key);
+				}
+
+			} else {
+				missedSearchResults = null;
+			}
 
 			// Send response
 			send({

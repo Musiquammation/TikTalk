@@ -1,12 +1,15 @@
 import "dotenv/config";
+import { WebSocketServer } from "ws";
 import express from "express";
 import http from "http";
 import https from "https";
 import fs from "fs";
-import { setupApp } from "./setupApp";
+import { Handler } from "./Handler";
+import { setupRequests } from "./setupRequests";
+import { handleSocket } from "./handleSocket";
 
-
-const app = setupApp();
+const handler = new Handler();
+const app = setupRequests(handler);
 
 const PORT = process.env.PORT || 3000;
 const USE_HTTPS = !!process.env.USE_HTTPS;
@@ -19,8 +22,8 @@ const server = USE_HTTPS
 	: http.createServer(app);
 
 
-
-
+const wss = new WebSocketServer({ server });
+handleSocket(wss, handler);
 
 
 server.listen(PORT, () => {

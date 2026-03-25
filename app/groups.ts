@@ -13,6 +13,7 @@ interface Group {
 
 export const groups = new Array<Group>();
 let currentGroup: Group | null = null;
+let currentGroupStorage: string | null = null;
 
 const html_groupList = document.getElementById("groupList")!;
 
@@ -71,10 +72,20 @@ export function openGroup(id: string, username: string) {
 }
 
 
-export function loadGroups() {
-	const str = localStorage.getItem('tiktalk-groups');
-	if (!str)
+export function loadGroups(id: string) {
+	currentGroupStorage = "tiktalk-groups:" + id;
+	// Empty data
+	html_groupList.innerHTML = "";
+	groups.length = 0;
+
+	const str = localStorage.getItem(currentGroupStorage);
+	if (!str) {
 		return;
+	}
+
+
+
+
 
 	for (let g of JSON.parse(str)) {
 		groups.push(g);
@@ -93,8 +104,12 @@ export function loadGroups() {
 	}
 }
 
-export function updateGroups() {
-	localStorage.setItem('tiktalk-groups', JSON.stringify(groups));
+export function updateGroupStorage() {
+	if (currentGroupStorage === null)
+		throw new Error("Group not specified");
+
+	localStorage.setItem(currentGroupStorage, JSON.stringify(groups));
+	console.log(groups);
 }
 
 
@@ -159,11 +174,14 @@ export function handleMissedGroups(missed: Missed[]) {
 		group.lastMsg = m.date;
 		updateGroup(group);
 	}
+
+	updateGroupStorage();
 }
 
 
 export function appendGroup(group: Group) {
 	updateGroup(group);
+	updateGroupStorage();
 }
 
 
@@ -181,4 +199,10 @@ export function getGroup(id: string | null = null) {
 	}
 
 	return group;
+}
+
+
+export function closeGroups() {
+	updateGroupStorage();
+	currentGroupStorage = null;
 }

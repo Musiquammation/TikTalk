@@ -176,16 +176,18 @@ export class Conversation {
 
 		if (this.loadedBlocks === 0) {
 			this.messagesEl.appendChild(fragment);
+			this.rebuildDateSeparators(this.messagesEl);
 			this.scrollToBottom();
 		} else {
 			const prevScrollHeight = this.messagesEl.scrollHeight;
 			this.messagesEl.prepend(fragment);
-			// Maintain scroll position after prepend
+			this.rebuildDateSeparators(this.messagesEl);
 			this.messagesEl.scrollTop += this.messagesEl.scrollHeight - prevScrollHeight;
 		}
 
 		this.loadedBlocks++;
 	}
+
 
 	private setupScrollLoader(messages: Message[]): void {
 		if (!this.messagesEl) return;
@@ -247,16 +249,25 @@ export class Conversation {
 		const wrapper = document.createElement("div");
 		const username = this.usernames[msg.author] ?? `User ${msg.author}`;
 		wrapper.className = `conv-message conv-message--${msg.author % 2 === 0 ? "left" : "right"}`;
+		wrapper.dataset.date = String(msg.date);
 
 		const meta = document.createElement("div");
 		meta.className = "conv-meta";
-		meta.textContent = `${username} · ${this.formatDate(msg.date)}`;
 
-		const bubble = document.createElement("div");
-		bubble.className = "conv-bubble";
-		bubble.textContent = msg.content;
+		const authorEl = document.createElement("span");
+		authorEl.className = "conv-meta__author";
+		authorEl.textContent = username;
 
-		wrapper.append(meta, bubble);
+		const contentEl = document.createElement("span");
+		contentEl.className = "conv-meta__content";
+		contentEl.textContent = msg.content;
+
+		const timeEl = document.createElement("span");
+		timeEl.className = "conv-meta__time";
+		timeEl.textContent = this.formatDate(msg.date);
+
+		meta.append(authorEl, contentEl, timeEl);
+		wrapper.appendChild(meta);
 		return wrapper;
 	}
 
@@ -265,18 +276,57 @@ export class Conversation {
 		const wrapper = document.createElement("div");
 		wrapper.className = "conv-message conv-message--right waiting";
 		wrapper.dataset.pendingId = String(id);
+		wrapper.dataset.date = String(date);
 
 		const meta = document.createElement("div");
 		meta.className = "conv-meta";
-		meta.textContent = `${username} · ${this.formatDate(date)}`;
 
-		const bubble = document.createElement("div");
-		bubble.className = "conv-bubble";
-		bubble.textContent = content;
+		const authorEl = document.createElement("span");
+		authorEl.className = "conv-meta__author";
+		authorEl.textContent = username;
 
-		wrapper.append(meta, bubble);
+		const contentEl = document.createElement("span");
+		contentEl.className = "conv-meta__content";
+		contentEl.textContent = content;
+
+		const timeEl = document.createElement("span");
+		timeEl.className = "conv-meta__time";
+		timeEl.textContent = this.formatDate(date);
+
+		meta.append(authorEl, contentEl, timeEl);
+		wrapper.appendChild(meta);
 		return wrapper;
 	}
+
+	private buildDateSeparator(timestamp: number): HTMLDivElement {
+		const sep = document.createElement("div");
+		sep.className = "conv-date-separator";
+		sep.dataset.date = String(this.toDateKey(timestamp));
+		sep.textContent = this.formatDateSeparator(timestamp);
+		return sep;
+	}
+
+	private rebuildDateSeparators(container: HTMLElement): void {
+		// Supprimer les séparateurs existants
+		container.querySelectorAll(".conv-date-separator").forEach(el => el.remove());
+
+		const messages = Array.from(container.querySelectorAll<HTMLElement>(".conv-message[data-date]"));
+		let lastKey: string | null = null;
+
+		for (const msg of messages) {
+			const ts = Number(msg.dataset.date) * 1000;
+			const key = this.toDateKey(ts);
+			if (key !== lastKey) {
+				lastKey = key;
+				msg.insertAdjacentElement("beforebegin", this.buildDateSeparator(ts));
+			}
+		}
+	}
+
+
+
+
+
 
 	private buildLoader(): HTMLDivElement {
 		const loader = document.createElement("div");
@@ -366,8 +416,24 @@ export class Conversation {
 		return new Intl.DateTimeFormat("en-US", {
 			hour: "2-digit",
 			minute: "2-digit",
-			day: "2-digit",
-			month: "short",
 		}).format(new Date(timestamp));
 	}
+
+	private toDateKey(timestamp: number): string {
+		const d = new Date(timestamp);
+		return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+	}
+
+	private formatDateSeparator(timestamp: number): string {
+		const now = new Date();
+		const d = new Date(timestamp);
+		const diffDays = Math.floor((now.setHours(0,0,0,0) - d.setHours(0,0,0,0)) / 86400000);
+
+		if (diffDays === 0) return "Today";
+		if (diffDays === 1) return "Yesterday";
+		if (diffDays < 7) return new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date(timestamp));
+		return new Intl.DateTimeFormat("en-US", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(timestamp));
+	}
+
+
 }

@@ -1,6 +1,7 @@
 import { startConnection, stopConnection, toggleTalkRequest } from "./net";
 import { SERV_RQST_ADDRESS } from "./servAddresses";
 import { Conversation } from "./Conversation";
+import { loadGroups } from "./groups";
 
 let publicUsername: string | null = null;
 
@@ -89,7 +90,7 @@ export function setupHtml() {
 	});
 	
 	// Autologin
-	(async () => {
+	{
 		const stored = localStorage.getItem('tiktalk-connection');
 		if (!stored) return;
 	
@@ -98,8 +99,9 @@ export function setupHtml() {
 	
 		publicUsername = credentials.name;
 		authenticate('login', credentials, null);
-	})();
 
+		loadGroups(credentials.name);
+	}	
 
 	// Disconnect
 	document.getElementById('disconnect')!.addEventListener('click', () => {

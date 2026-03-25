@@ -1,4 +1,4 @@
-import { sendGroupOpen, sendMessage } from "./net";
+import { sendGroupOpen, sendMessage, sendTyping } from "./net";
 import { conversation, getUsername } from "./setupHtml";
 
 
@@ -65,11 +65,11 @@ export function openGroup(id: string, username: string) {
 	// Open html panel
 	conversation.open(id, group.pos, usernames, {
 		send(content, msgId) {
-			sendMessage(content, id, group.pos, msgId);
+			sendMessage(content, id, msgId);
 		},
 
 		typing(type) {
-			console.log(type);
+			sendTyping(id, type)
 		},
 	});
 
@@ -111,7 +111,6 @@ export function loadGroups() {
 }
 
 export function updateGroupStorage() {
-	console.log(groups[0]);
 	localStorage.setItem(generateStorageItemName(), JSON.stringify(groups));
 }
 
@@ -215,6 +214,7 @@ export function getGroup(id: string | null = null) {
 
 	return group;
 }
+
 
 
 export function collectBlacklist(couldown: number): string[] {

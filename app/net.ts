@@ -117,6 +117,21 @@ export function startConnection(data: any) {
 			break;
 		}
 
+		case 'typing':
+		{
+			if (msg.groupId !== getGroup().id)
+				return;
+
+			if (msg.typing) {
+				conversation.addTyping(msg.author);
+			} else {
+				conversation.removeTyping(msg.author);
+			}
+
+
+			break;
+		}
+
 
 
 		case 'error':
@@ -159,7 +174,7 @@ function sendTalkRequest() {
 
 
 export function sendMessage(content: string,
-	groupId: string, author: number, msgId: number
+	groupId: string, msgId: number
 ) {
 	if (!global)
 		throw new Error("No socket to use");
@@ -169,10 +184,21 @@ export function sendMessage(content: string,
 		session: global.session,
 		content,
 		groupId,
-		author,
 		msgId
 	}));
 }
+
+export function sendTyping(groupId: string, typing: boolean) {
+	if (!global)
+		throw new Error("No socket to use");
+
+	global.socket.send(JSON.stringify({
+		action: typing ? 'typing-on' : 'typing-off',
+		session: global.session,
+		groupId,
+	}));
+}
+
 
 export function sendGroupOpen(groupId: string) {
 	if (!global)

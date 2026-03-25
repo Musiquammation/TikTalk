@@ -39,6 +39,10 @@ export class Conversation {
 
 	private pos = -1;
 
+	private typingAuthors = new Set<number>();
+	private typingEl: HTMLDivElement | null = null;
+	private typingInterval: ReturnType<typeof setInterval> | null = null;
+
 	constructor(panel: HTMLDivElement) {
 		this.panel = panel;
 		this.panel.classList.add("conv-panel");
@@ -103,6 +107,13 @@ export class Conversation {
 		this.usernames = usernames;
 		this.loadedBlocks = 0;
 
+		// Reset typing state when opening a conversation
+		this.typingAuthors.clear();
+		if (this.typingEl) {
+			this.typingEl.remove();
+			this.typingEl = null;
+		}
+
 		// Ensure record exists in DB
 		let record = await this.getRecord(id);
 		if (!record) {
@@ -123,6 +134,12 @@ export class Conversation {
 		this.messagesEl = document.createElement("div");
 		this.messagesEl.className = "conv-messages";
 		this.panel.appendChild(this.messagesEl);
+
+		// Create typing indicator element (hidden by default)
+		this.typingEl = document.createElement("div");
+		this.typingEl.className = "conv-typing";
+		this.typingEl.style.display = "none";
+		this.panel.appendChild(this.typingEl);
 
 		this.panel.appendChild(this.buildInputBar(eventHandler));
 
@@ -253,7 +270,6 @@ export class Conversation {
 
 	private buildMessageEl(msg: Message): HTMLDivElement {
 		const wrapper = document.createElement("div");
-		console.log(this.usernames);
 		let username: string;
 		if (msg.author === this.pos) {
 			username = "You";
@@ -450,4 +466,61 @@ export class Conversation {
 	}
 
 
+
+
+
+	// ─── Typing management ─────────────────────────────────────────────────────
+	addTyping(author: number) {
+		// Ignore current user
+		if (author === this.pos) return;
+
+		this.typingAuthors.add(author);
+		this.updateTypingUI();
+	}
+
+	removeTyping(author: number) {
+		this.typingAuthors.delete(author);
+		this.updateTypingUI();
+	}
+
+	private updateTypingUI() {
+		if (!this.typingEl) return;
+
+
+		// No one typing → hide indicator and stop animation
+		if (this.typingAuthors.size === 0) {
+			this.typingEl.style.display = "none";
+
+			if (this.typingInterval) {
+				clearInterval(this.typingInterval);
+				this.typingInterval = null;
+			}
+			return;
+		}
+
+		// Build display names from authors set
+		const names = Array.from(this.typingAuthors)
+			.map(a => this.usernames[a] ?? `User ${a}`);
+
+		let text = "";
+		if (names.length === 1) {
+			text = `${names[0]} is typing`;
+		} else if (names.length === 2) {
+			text = `${names[0]} and ${names[1]} are typing`;
+		} else {
+			text = `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} are typing`;
+		}
+
+		this.typingEl.style.display = "block";
+
+		// Start / maintain "..." animation
+		let dots = 0;
+
+		if (this.typingInterval) clearInterval(this.typingInterval);
+
+		this.typingInterval = setInterval(() => {
+			dots = (dots + 1) % 4;
+			this.typingEl!.textContent = text + ".".repeat(dots);
+		}, 400);
+	}
 }

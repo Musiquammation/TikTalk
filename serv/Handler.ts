@@ -32,6 +32,7 @@ class UserSession {
 	private date = Date.now();
 	group: string | null = null;
 	ws: WebSocket | null = null;
+	typing = false;
 
 	public static COULDOWN = 3600 * 1000;
 
@@ -295,7 +296,7 @@ export class Handler {
 	}
 
 	pushMessage(session: session_t, content: string,
-		groupId: string, author: number, date: number
+		groupId: string, date: number
 	) {
 		const u = this.users.get(session);
 		if (!u) {
@@ -313,6 +314,8 @@ export class Handler {
 
 		const handledIds = new Set<id_t>();
 		handledIds.add(u.id);
+
+		const author = group.allUsers.indexOf(u.id);
 
 		// Send message to connected users
 		console.log(group.users);
@@ -356,6 +359,45 @@ export class Handler {
 		if (missersIds) {
 			this.db.addMissedMessage(content, missersIds, u.id, date, groupId);
 		}
+	}
+
+
+	setTyping(session: session_t, groupId: group_t, typing: boolean) {
+		const u = this.users.get(session);
+		if (!u) {
+			throw new Error("Cannot find session");
+		}
+
+		if (u.group !== groupId) {
+			throw new Error("Invalid group");
+		}
+
+		const group = this.groups.get(groupId);
+		if (!group) {
+			throw new Error("Active group cannot be found");
+		}
+
+		const author = group.allUsers.indexOf(u.id);
+		u.typing = typing;
+
+		// Send typing
+		for (const us of group.users) {
+			if (us === session)
+				continue; // same user
+
+			const user = this.users.get(us);
+			if (!user || !user.ws)
+				continue;
+
+			user.ws.send(JSON.stringify({
+				action: 'typing',
+				author,
+				groupId,
+				typing
+			}));
+
+		}
+
 	}
 }
 

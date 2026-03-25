@@ -71,7 +71,7 @@ export function handleSocket(wss: WebSocketServer, handler: Handler) {
 				{
 					const date = Date.now();
 					handler.pushMessage(content.session, content.content,
-						content.groupId, content.author, date);
+						content.groupId, date);
 
 					ws.send(JSON.stringify({
 						action: 'wellSent',
@@ -83,13 +83,13 @@ export function handleSocket(wss: WebSocketServer, handler: Handler) {
 
 				case 'typing-on':
 				{
-					/// TODO: typing-on
+					handler.setTyping(content.session, content.groupId, true);
 					break;
 				}
 
 				case 'typing-off':
 				{
-					/// TODO: typing-on
+					handler.setTyping(content.session, content.groupId, false);
 					break;
 				}
 

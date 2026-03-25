@@ -4,15 +4,37 @@ import { Database } from "./Database.ts";
 
 type session_t = string;
 type id_t = string;
+type group_t = string;
 
+class Group {
+	users: session_t[];
+	allUsers: id_t[];
+
+	constructor(first: session_t, allUsers: id_t[]) {
+		this.users = [first];
+		this.allUsers = allUsers;
+	}
+
+	addUser(session: session_t) {
+		if (!this.users.includes(session)) {
+			this.users.push(session);
+		}
+
+	}
+
+	removeUser(session: session_t) {
+		this.users = this.users.filter(u => u !== session);
+	}
+}
 
 class UserSession {
 	readonly id: id_t;
 	readonly name: string;
 	private date = Date.now();
+	group: string | null = null;
 	ws: WebSocket | null = null;
 
-	public static COULDOWN = 3600*1000;
+	public static COULDOWN = 3600 * 1000;
 
 	constructor(id: id_t, name: string) {
 		this.id = id;
@@ -41,16 +63,30 @@ class TalkRequest {
 	}
 }
 
+async function generateGroupId(ids: string[]): Promise<string> {
+	const sorted = [...ids].sort();
+
+	const input = sorted.join("|");
+
+	const encoder = new TextEncoder();
+	const data = encoder.encode(input);
+	const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+
+	const hashArray = Array.from(new Uint8Array(hashBuffer));
+	return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
 
 
 export class Handler {
 	private db = new Database();
 	private users = new Map<session_t, UserSession>();
+	private groups = new Map<group_t, Group>();
 	private talkRequests: TalkRequest[] = [];
 	private interval: any;
 
-	static WASH_INTERVAL = 3600*100;
-	static USER_LIFETIME = 3*3600*100;
+	static WASH_INTERVAL = 3600 * 100;
+	static USER_LIFETIME = 3 * 3600 * 100;
 
 	constructor() {
 		this.db.initializeTables();
@@ -65,7 +101,7 @@ export class Handler {
 
 			for (const [token, session] of this.users) {
 				if (now - session.getDate() > Handler.USER_LIFETIME) {
-					this.users.delete(token);
+					this.disconnectUser(token);
 				}
 			}
 
@@ -81,7 +117,7 @@ export class Handler {
 	async createUser(name: string, email: string, password: string) {
 		const id = await this.db.addUser(name, email, password);
 		const u = await this.connectUser(id, name);
-		return {token: u.token, id};
+		return { token: u.token, id };
 	}
 
 	async checkUser(email: string, password: string) {
@@ -90,7 +126,7 @@ export class Handler {
 			return null;
 
 		const u = await this.connectUser(c.id, c.name);
-		return {token: u.token, id: c.id};
+		return { token: u.token, id: c.id };
 
 	}
 
@@ -99,7 +135,7 @@ export class Handler {
 		const session = new UserSession(id, name);
 
 		this.users.set(token, session);
-		return {token, session};
+		return { token, session };
 	}
 
 	disconnectUser(session: session_t) {
@@ -114,41 +150,67 @@ export class Handler {
 	appendSocket(session: session_t, ws: WebSocket) {
 		const u = this.users.get(session);
 		if (!u)
-			return false;
+			return null;
 
 		u.ws = ws;
-		return true;
+
+		ws.onclose = () => {
+			this.disconnectUser(session);
+		};
+
+		return u.name;
 	}
 
 	searchTalker(session: session_t, blacklist: id_t[]) {
 		const u = this.users.get(session);
 		if (!u) {
+			console.error("Cannot find session:", session);
 			throw new Error("Cannot find session");
 		}
 
-		for (const r of this.talkRequests) {
-			if (r.blacklist.includes(u.id) || blacklist.includes(r.id))
+		// Search if session has already a request
+		for (const r of this.talkRequests)
+			if (r.session === session)
+				return null;
+
+
+		// for (const r of this.talkRequests) {
+		const talkRequestLength = this.talkRequests.length;
+		for (let i = 0; i < talkRequestLength; i++) {
+			const r = this.talkRequests[i];
+			if (r.id === u.id || r.blacklist.includes(u.id) || blacklist.includes(r.id))
 				continue;
-	
+
+			this.talkRequests.splice(i, 1); // remove current request
+
 			this.startConv([r.session, session]);
 			return r;
 		}
-	
+
 		this.talkRequests.push(new TalkRequest(u.id, session, blacklist));
 		return null;
 	}
 
-	startConv(sessions: session_t[]) {
-		const groupId = generateToken();
+	removeTalker(session: session_t) {
+		for (let i = this.talkRequests.length - 1; i >= 0; i--) {
+			if (this.talkRequests[i].session === session) {
+				this.talkRequests.splice(i, 1);
+			}
+		}
+	}
 
+	async startConv(sessions: session_t[]) {
 		const list = sessions.map(s => {
 			const u = this.users.get(s);
 			if (!u) {
+				console.error("Cannot find", s);
 				throw new Error("Cannot find session");
 			}
 
-			return {id: u.id, ws: u.ws, name: u.name};
+			return { id: u.id, ws: u.ws, name: u.name };
 		});
+
+		const groupId = await generateGroupId(list.map(u => u.id));
 
 		for (let i = 0; i < list.length; i++) {
 			const u = list[i];
@@ -164,6 +226,116 @@ export class Handler {
 				usernames: list.map((u, idx) =>
 					idx !== i ? u.name : null).filter(Boolean)
 			}));
+		}
+	}
+
+	collectSessions(userId: id_t) {
+		const list: UserSession[] = [];
+
+		for (const session of this.users.values()) {
+			if (session.id === userId) {
+				list.push(session);
+			}
+		}
+
+		return list;
+	}
+
+	async selectGroup(session: session_t, groupId: string | null, allUsers: id_t[] | null) {
+		const u = this.users.get(session);
+		if (!u) {
+			throw new Error("Cannot find session");
+		}
+
+		// Quit previous group
+		if (u.group !== null) {
+			const group = this.groups.get(u.group);
+			if (group) {
+				group.removeUser(session);
+				if (group.users.length === 0) {
+					this.groups.delete(u.group);
+				}
+			}
+		}
+
+
+		// Enter new group
+		if (groupId === null)
+			return null;
+
+		if (allUsers === null)
+			throw new Error("Missing allUsers");
+
+		// Check given allUsers
+		allUsers.push(u.id);
+		const candidateId = await generateGroupId(allUsers);
+		if (candidateId !== groupId) {
+			throw new Error("allUsers list does not match groupId");
+		}
+
+		// Check for group
+		const group = this.groups.get(groupId);
+		if (group) {
+			group.addUser(session);
+		} else {
+			this.groups.set(groupId, new Group(session, allUsers));
+		}
+
+		u.group = groupId;
+
+		// Collect missed messages
+		return await this.db.collectMissedMessages(u.id, groupId);
+	}
+
+	pushMessage(session: session_t, content: string,
+		groupId: string, author: number, date: number
+	) {
+		const u = this.users.get(session);
+		if (!u) {
+			throw new Error("Cannot find session");
+		}
+
+		if (u.group !== groupId) {
+			throw new Error("Invalid group");
+		}
+
+		const group = this.groups.get(groupId);
+		if (!group) {
+			throw new Error("Active group cannot be found");
+		}
+
+		const handledIds = new Set<id_t>();
+		handledIds.add(u.id);
+
+		// Send message to connected users
+		for (const us of group.users) {
+			if (us === session)
+				continue;
+
+			const user = this.users.get(us);
+			if (!user || !user.ws)
+				continue;
+
+			user.ws.send(JSON.stringify({
+				action: 'push',
+				content,
+				author,
+				date
+			}));
+
+			handledIds.add(user.id);
+		}
+
+		// Save missed messages
+		const destIds = [];
+		for (const cid of group.allUsers)
+			if (!handledIds.has(cid))
+				destIds.push(cid);
+
+		console.log(destIds);
+
+		if (destIds) {
+			this.db.addMissedMessage(content, destIds, u.id, date, groupId);
 		}
 	}
 }

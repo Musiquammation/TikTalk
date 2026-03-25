@@ -1,0 +1,373 @@
+interface Message {
+	content: string;
+	author: number;
+	date: number;
+}
+
+interface ConversationRecord {
+	id: string;
+	messages: Message[];
+}
+
+interface EventHandler {
+	send(content: string, msgId: number): void;
+	typing(type: boolean): void;
+}
+
+export class Conversation {
+	static readonly BLOCK_SIZE = 32;
+	private static readonly DB_NAME = "conversations_db";
+	private static readonly DB_VERSION = 1;
+	private static readonly STORE_NAME = "conversations";
+
+	private panel: HTMLDivElement;
+	private db: IDBDatabase | null = null;
+
+	private currentId: string | null = null;
+	private usernames: string[] = [];
+	private loadedBlocks: number = 0;
+	private totalMessages: number = 0;
+
+	// DOM elements
+	private messagesEl: HTMLDivElement | null = null;
+	private loaderEl: HTMLDivElement | null = null;
+	private inputEl: HTMLInputElement | null = null;
+	private sendBtn: HTMLButtonElement | null = null;
+
+	// Pending (waiting) messages: temp id → { element, content, date }
+	private pendingMessages = new Map<number, { el: HTMLDivElement; content: string; date: number }>();
+
+	constructor(panel: HTMLDivElement) {
+		this.panel = panel;
+		this.panel.classList.add("conv-panel");
+	}
+
+	// ─── IndexedDB ────────────────────────────────────────────────────────────
+
+	private openDB(): Promise<IDBDatabase> {
+		return new Promise((resolve, reject) => {
+			if (this.db) return resolve(this.db);
+
+			const req = indexedDB.open(Conversation.DB_NAME, Conversation.DB_VERSION);
+
+			req.onupgradeneeded = (e) => {
+				const db = (e.target as IDBOpenDBRequest).result;
+				if (!db.objectStoreNames.contains(Conversation.STORE_NAME)) {
+					db.createObjectStore(Conversation.STORE_NAME, { keyPath: "id" });
+				}
+			};
+
+			req.onsuccess = (e) => {
+				this.db = (e.target as IDBOpenDBRequest).result;
+				resolve(this.db);
+			};
+
+			req.onerror = () => reject(req.error);
+		});
+	}
+
+	private async getRecord(id: string): Promise<ConversationRecord | undefined> {
+		const db = await this.openDB();
+		return new Promise((resolve, reject) => {
+			const tx = db.transaction(Conversation.STORE_NAME, "readonly");
+			const store = tx.objectStore(Conversation.STORE_NAME);
+			const req = store.get(id);
+			req.onsuccess = () => resolve(req.result as ConversationRecord | undefined);
+			req.onerror = () => reject(req.error);
+		});
+	}
+
+	private async putRecord(record: ConversationRecord): Promise<void> {
+		const db = await this.openDB();
+		return new Promise((resolve, reject) => {
+			const tx = db.transaction(Conversation.STORE_NAME, "readwrite");
+			const store = tx.objectStore(Conversation.STORE_NAME);
+			const req = store.put(record);
+			req.onsuccess = () => resolve();
+			req.onerror = () => reject(req.error);
+		});
+	}
+
+	// ─── Public API ───────────────────────────────────────────────────────────
+
+	/**
+	 * Opens the conversation in the panel.
+	 * Creates the conversation in the DB if it doesn't exist.
+	 * Loads the first 2 blocks of messages.
+	 */
+	async open(id: string, usernames: string[], eventHandler: EventHandler): Promise<void> {
+		this.currentId = id;
+		this.usernames = usernames;
+		this.loadedBlocks = 0;
+
+		// Ensure record exists in DB
+		let record = await this.getRecord(id);
+		if (!record) {
+			record = { id, messages: [] };
+			await this.putRecord(record);
+		}
+		this.totalMessages = record.messages.length;
+
+		// Build panel DOM
+		this.panel.innerHTML = "";
+		this.panel.setAttribute("data-conv-id", id);
+
+		this.panel.appendChild(this.buildHeader(usernames));
+
+		this.loaderEl = this.buildLoader();
+		this.panel.appendChild(this.loaderEl);
+
+		this.messagesEl = document.createElement("div");
+		this.messagesEl.className = "conv-messages";
+		this.panel.appendChild(this.messagesEl);
+
+		this.panel.appendChild(this.buildInputBar(eventHandler));
+
+		// Load first 2 blocks
+		console.log(record.messages);
+		await this.loadBlock(record.messages);
+		await this.loadBlock(record.messages);
+
+		this.updateLoader();
+		this.setupScrollLoader(record.messages);
+	}
+
+	/**
+	 * Appends a new message to the conversation (DB + DOM).
+	 */
+	async add(msg: string, author: number, date: number): Promise<void> {
+		if (!this.currentId) throw new Error("No conversation open.");
+
+		const message: Message = { content: msg, author, date };
+
+		const record = await this.getRecord(this.currentId);
+		if (!record) throw new Error(`Conversation "${this.currentId}" not found.`);
+
+		record.messages.push(message);
+		await this.putRecord(record);
+
+		this.totalMessages = record.messages.length;
+
+		// Only render if the message falls in an already-loaded range
+		const msgIndex = record.messages.length - 1;
+		const loadedCount = this.loadedBlocks * Conversation.BLOCK_SIZE;
+		if (msgIndex < loadedCount && this.messagesEl) {
+			this.messagesEl.appendChild(this.buildMessageEl(message));
+			this.scrollToBottom();
+		}
+
+		this.updateLoader();
+	}
+
+	// ─── Block loading ────────────────────────────────────────────────────────
+
+	private async loadBlock(messages: Message[]): Promise<void> {
+		if (!this.messagesEl) return;
+
+		const start = this.loadedBlocks * Conversation.BLOCK_SIZE;
+		const end = Math.min(start + Conversation.BLOCK_SIZE, messages.length);
+
+		if (start >= messages.length) return;
+
+		const fragment = document.createDocumentFragment();
+		for (let i = start; i < end; i++) {
+			fragment.appendChild(this.buildMessageEl(messages[i]));
+		}
+
+		if (this.loadedBlocks === 0) {
+			this.messagesEl.appendChild(fragment);
+			this.scrollToBottom();
+		} else {
+			const prevScrollHeight = this.messagesEl.scrollHeight;
+			this.messagesEl.prepend(fragment);
+			// Maintain scroll position after prepend
+			this.messagesEl.scrollTop += this.messagesEl.scrollHeight - prevScrollHeight;
+		}
+
+		this.loadedBlocks++;
+	}
+
+	private setupScrollLoader(messages: Message[]): void {
+		if (!this.messagesEl) return;
+		this.messagesEl.addEventListener("scroll", async () => {
+			if (this.messagesEl!.scrollTop < 80) {
+				const loadedCount = this.loadedBlocks * Conversation.BLOCK_SIZE;
+				if (loadedCount < messages.length) {
+					await this.loadBlock(messages);
+					this.updateLoader();
+				}
+			}
+		});
+	}
+
+	/**
+	 * Confirms a pending message: removes .waiting, persists it to the DB.
+	 */
+	async markAsSent(id: number, date: number) {
+		if (!this.currentId) throw new Error("No conversation open.");
+
+		const pending = this.pendingMessages.get(id);
+		if (!pending) throw new Error(`No pending message with id ${id}.`);
+
+		// Remove waiting state from DOM
+		pending.el.classList.remove("waiting");
+		this.pendingMessages.delete(id);
+
+		// Persist to DB (author index 0 = local user by convention)
+		const message: Message = { content: pending.content, author: 0, date: pending.date };
+
+		const record = await this.getRecord(this.currentId);
+		if (!record) throw new Error(`Conversation "${this.currentId}" not found.`);
+
+		record.messages.push(message);
+		await this.putRecord(record);
+
+		this.totalMessages = record.messages.length;
+		this.updateLoader();
+	}
+
+	// ─── DOM builders ─────────────────────────────────────────────────────────
+
+	private buildHeader(usernames: string[]): HTMLDivElement {
+		const header = document.createElement("div");
+		header.className = "conv-header";
+
+		const title = document.createElement("span");
+		title.className = "conv-title";
+		title.textContent =
+			usernames.length === 2
+				? usernames.join(" & ")
+				: `${usernames[0]} + ${usernames.length - 1} others`;
+
+		header.appendChild(title);
+		return header;
+	}
+
+	private buildMessageEl(msg: Message): HTMLDivElement {
+		const wrapper = document.createElement("div");
+		const username = this.usernames[msg.author] ?? `User ${msg.author}`;
+		wrapper.className = `conv-message conv-message--${msg.author % 2 === 0 ? "left" : "right"}`;
+
+		const meta = document.createElement("div");
+		meta.className = "conv-meta";
+		meta.textContent = `${username} · ${this.formatDate(msg.date)}`;
+
+		const bubble = document.createElement("div");
+		bubble.className = "conv-bubble";
+		bubble.textContent = msg.content;
+
+		wrapper.append(meta, bubble);
+		return wrapper;
+	}
+
+	private buildWaitingMessageEl(content: string, date: number, id: number): HTMLDivElement {
+		const username = this.usernames[0] ?? "Me";
+		const wrapper = document.createElement("div");
+		wrapper.className = "conv-message conv-message--right waiting";
+		wrapper.dataset.pendingId = String(id);
+
+		const meta = document.createElement("div");
+		meta.className = "conv-meta";
+		meta.textContent = `${username} · ${this.formatDate(date)}`;
+
+		const bubble = document.createElement("div");
+		bubble.className = "conv-bubble";
+		bubble.textContent = content;
+
+		wrapper.append(meta, bubble);
+		return wrapper;
+	}
+
+	private buildLoader(): HTMLDivElement {
+		const loader = document.createElement("div");
+		loader.className = "conv-loader";
+		loader.textContent = "↑ scroll to load older messages";
+		return loader;
+	}
+
+	private buildInputBar(eventHandler: EventHandler): HTMLDivElement {
+		const bar = document.createElement("div");
+		bar.className = "conv-input-bar";
+
+		this.inputEl = document.createElement("input");
+		this.inputEl.type = "text";
+		this.inputEl.className = "conv-input";
+		this.inputEl.placeholder = "Write a message…";
+
+		this.sendBtn = document.createElement("button");
+		this.sendBtn.type = "button";
+		this.sendBtn.className = "conv-send-btn";
+		this.sendBtn.textContent = "Send";
+
+		// Typing indicator: fires typing(true) on first keystroke,
+		// typing(false) after 1.5 s of inactivity.
+		let typingActive = false;
+		let typingTimeout: ReturnType<typeof setTimeout> | null = null;
+
+		this.inputEl.addEventListener("input", () => {
+			if (!typingActive) {
+				typingActive = true;
+				eventHandler.typing(true);
+			}
+			if (typingTimeout !== null) clearTimeout(typingTimeout);
+			typingTimeout = setTimeout(() => {
+				typingActive = false;
+				typingTimeout = null;
+				eventHandler.typing(false);
+			}, 1500);
+		});
+
+		// Send on Enter
+		this.inputEl.addEventListener("keydown", (e) => {
+			if (e.key === "Enter") this.handleSend(eventHandler);
+		});
+
+		this.sendBtn.addEventListener("click", () => this.handleSend(eventHandler));
+
+		bar.append(this.inputEl, this.sendBtn);
+		return bar;
+	}
+
+	private handleSend(eventHandler: EventHandler): void {
+		if (!this.inputEl || !this.messagesEl) return;
+		const content = this.inputEl.value.trim();
+		if (!content) return;
+		this.inputEl.value = "";
+
+		const id = Math.floor(Math.random() * 2 ** 31);
+		const date = Date.now();
+
+		// Render the bubble immediately as waiting (not yet in DB)
+		const el = this.buildWaitingMessageEl(content, date, id);
+		this.messagesEl.appendChild(el);
+		this.scrollToBottom();
+
+		this.pendingMessages.set(id, { el, content, date });
+
+		eventHandler.send(content, id);
+	}
+
+	// ─── Helpers ──────────────────────────────────────────────────────────────
+
+	private updateLoader(): void {
+		if (!this.loaderEl) return;
+		const loadedCount = this.loadedBlocks * Conversation.BLOCK_SIZE;
+		const allLoaded = loadedCount >= this.totalMessages;
+		this.loaderEl.style.display = allLoaded ? "none" : "flex";
+	}
+
+	private scrollToBottom(): void {
+		if (this.messagesEl) {
+			this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
+		}
+	}
+
+	private formatDate(timestamp: number): string {
+		return new Intl.DateTimeFormat("en-US", {
+			hour: "2-digit",
+			minute: "2-digit",
+			day: "2-digit",
+			month: "short",
+		}).format(new Date(timestamp));
+	}
+}

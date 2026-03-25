@@ -1,19 +1,35 @@
-import { appendGroup, handleMissedGroups } from "./groups";
+import { appendGroup, getGroup, handleMissedGroups } from "./groups";
 import { SERV_SOCK_ADDRESS } from "./servAddresses";
+import { conversation, getTalkRequestStatus, setTalkRequestButton, setUsername } from "./setupHtml";
+
+
+interface Global {
+	socket: WebSocket;
+	session: string;
+}
+
+let global: Global | null = null;
 
 export function startConnection(data: any) {
-	const session: string = data.token;
+	if (global) {
+		console.warn("Closing previous socket");
+		global.socket.close();
+	}
 	
-
+	const session: string = data.token;
 	handleMissedGroups(data.missed);
 	
 
 	// Update groups
-
-	
-
 	const socket = new WebSocket(SERV_SOCK_ADDRESS);
-	
+
+	// share
+	global = {
+		socket,
+		session
+	};
+
+	console.log("Start session:", session);
 
 	socket.addEventListener('open', e => {
 		socket.send(JSON.stringify({
@@ -28,7 +44,7 @@ export function startConnection(data: any) {
 
 		switch (msg.action) {
 		case 'login-ok':
-			console.log("Login ok");
+			setUsername(msg.username);
 			break;
 
 		case 'askTalk':
@@ -44,37 +60,140 @@ export function startConnection(data: any) {
 				lastMsg: Date.now(),
 				pos: msg.pos,
 				missed: 0,
-				name: null
 			});
+			setTalkRequestButton('talk');
+
+			break;
+		}
+
+		case 'cancelTalk':
+		{
+			setTalkRequestButton('talk');
+			break;
+		}
+
+		case 'missedMsg':
+		{
+			const missedList = msg.missed as {
+				content: string;
+				date: number;
+				author: string;
+			}[];
+
+
+			const group = getGroup();
+			
+			for (const m of missedList) {
+				const a = group.users.indexOf(m.author);
+				conversation.add(m.content, a, m.date);
+			}
+
+			break;
+		}
+
+		case 'push':
+		{
+			conversation.add(msg.content, msg.author, msg.date);
+			console.log(msg.content);
+			break;
+		}
+
+		case 'wellSent':
+		{
+			conversation.markAsSent(msg.msgId, msg.date);
+			console.log(msg.msgId);
 			break;
 		}
 
 
 		case 'error':
-			console.error("Serv error:", msg.label);
+			console.error(msg.label);
 			break;
 
 		default:
 			throw new Error("Invalid action");
 		}
-	})
+	});
 }
 
 
-export function sendTalkRequest() {
-	const requestId = Date.now();
+export function toggleTalkRequest() {
+	switch (getTalkRequestStatus()) {
+	case "talk":
+		sendTalkRequest();
+		return 'cancel';
+		
+	case "cancel":
+		cancelTalkRequest();
+		return 'canceling';
 
-	let alive = true;
-
-
-	return {
-		async promise() {
-
-		},
-
-
-		cancel() {
-			alive = false;
-		}
-	}
+	case "canceling":
+		return null; // nothing to do
+	}	
 }
+
+function sendTalkRequest() {
+	if (!global)
+		throw new Error("No socket to use");
+
+	global.socket.send(JSON.stringify({
+		action: 'askTalk',
+		session: global.session,
+		blacklist: []
+	}));
+}
+
+
+
+export function sendMessage(content: string,
+	groupId: string, author: number, msgId: number
+) {
+	if (!global)
+		throw new Error("No socket to use");
+
+	global.socket.send(JSON.stringify({
+		action: 'message',
+		session: global.session,
+		content,
+		groupId,
+		author,
+		msgId
+	}));
+}
+
+export function sendGroupOpen(groupId: string) {
+	if (!global)
+		throw new Error("No socket to use");
+
+	global.socket.send(JSON.stringify({
+		action: 'openConv',
+		session: global.session,
+		groupId,
+		allUsers: getGroup(groupId).users
+	}));
+
+}
+
+function cancelTalkRequest() {
+	if (!global)
+		throw new Error("No socket to use");
+
+	global.socket.send(JSON.stringify({
+		action: 'cancelTalk',
+		session: global.session,
+	}));
+
+}
+
+
+export function stopConnection() {
+	if (!global)
+		return;
+
+	
+	global.socket.close();
+	localStorage.removeItem('tiktalk-connection');
+
+	global = null;
+}
+

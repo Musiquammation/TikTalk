@@ -1,30 +1,33 @@
+import { sendGroupOpen, sendMessage } from "./net";
+import { getUsername, conversation } from "./setupHtml";
+
 interface Group {
 	users: string[];
-	usernames: string[] | null;
+	usernames: string[];
 	id: string;
 	pos: number;
 	lastMsg: number;
 	missed: number;
-	name: string | null;
 }
 
 
 export const groups = new Array<Group>();
-
+let currentGroup: Group | null = null;
 
 const html_groupList = document.getElementById("groupList")!;
 
 
 function onGroupClick(e: PointerEvent) {
 	const groupId = (e.currentTarget as HTMLElement).getAttribute("groupId");
-	if (groupId) {
-		openGroup(groupId);
+	const username = getUsername();
+	if (groupId && username) {
+		openGroup(groupId, username);
 	}
 }
 
 function createHTML(group: Group) {
 	const div = document.createElement("div");
-	let innerHTML = `<span>${group.name || group.usernames?.join(", ") || "(untitled)"}</span>`;
+	let innerHTML = `<span>${group.usernames?.join(", ")}</span>`;
 	if (group.missed > 0)
 		innerHTML += `<span>${group.missed}</span>`;
 
@@ -36,8 +39,35 @@ function createHTML(group: Group) {
 }
 
 
-export function openGroup(id: string) {
-	console.log(id);
+export function openGroup(id: string, username: string) {
+	const group = groups.find(i => i.id === id);
+	if (!group) {
+		throw new Error("Cannot find group " + id);
+	}
+	
+	currentGroup = group;
+
+	const usernames = [
+		...group.usernames.slice(0, group.pos),
+		username,
+		...group.usernames.splice(group.pos)
+	];
+
+	// Open html panel
+	conversation.open(id, usernames, {
+		send(content, msgId) {
+			sendMessage(content, id, group.pos, msgId);
+		},
+
+		typing(type) {
+			console.log(type);
+		},
+	});
+
+
+	// Send open (collects missed messages and new ones)
+	sendGroupOpen(id);
+
 }
 
 
@@ -134,4 +164,21 @@ export function handleMissedGroups(missed: Missed[]) {
 
 export function appendGroup(group: Group) {
 	updateGroup(group);
+}
+
+
+export function getGroup(id: string | null = null) {
+	if (id === null) {
+		if (!currentGroup)
+			throw new Error("No current group");
+
+		return currentGroup;
+	}
+
+	const group = groups.find(i => i.id === id);
+	if (!group) {
+		throw new Error("Cannot find group " + id);
+	}
+
+	return group;
 }

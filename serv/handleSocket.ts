@@ -2,50 +2,107 @@ import { WebSocketServer } from "ws";
 import { Handler } from "./Handler.ts";
 
 export function handleSocket(wss: WebSocketServer, handler: Handler) {
-    wss.on("connection", ws => {
-        ws.on("message", msg => {
-            try {
-                const content = JSON.parse(msg.toString());
-                switch (content.action) {
-                case 'login':
-                {
-                    if (handler.appendSocket(content.session, ws)) {
-                        ws.send(JSON.stringify({
-                            action: 'login-ok',
-                        }));
-                    } else {
-                        throw new Error("Failed to login");
-                    }
+	wss.on("connection", ws => {
+		ws.on("message", async msg => {
+			try {
+				const content = JSON.parse(msg.toString());
+				switch (content.action) {
+				case 'login':
+				{
+					const username = handler.appendSocket(content.session, ws);
+					if (username !== null) {
+						ws.send(JSON.stringify({
+							action: 'login-ok',
+							username
+						}));
+					} else {
+						throw new Error("Failed to login");
+					}
 
-                    break;
-                }
+					break;
+				}
 
-                case 'askTalk':
-                {
-                    if (!content.blacklist)
-                        throw new Error("Blacklist is missing");
+				case 'askTalk':
+				{
+					if (!content.blacklist)
+						throw new Error("Blacklist is missing");
 
-                    const r = handler.searchTalker(
-                        content.session,
-                        content.blacklist,
-                    );
+					const r = handler.searchTalker(
+						content.session,
+						content.blacklist,
+					);
 
-                    ws.send(JSON.stringify({
-                        action: 'askTalk'
-                    }));
-                }
+					ws.send(JSON.stringify({
+						action: 'askTalk'
+					}));
 
-                default:
-                    throw new Error("Invalid action");
-                }
+					break;
+				}
 
-            } catch (e) {
-                ws.send(JSON.stringify({
-                    action: 'error',
-                    label: e+""
-                }));
-            }
-        });
-    });
+				case 'cancelTalk':
+				{
+					handler.removeTalker(content.session);
+					ws.send(JSON.stringify({
+						action: 'cancelTalk'
+					}));
+
+					break;
+				}
+
+				case 'openConv':
+				{
+					const result = await handler.selectGroup(content.session,
+						content.groupId, content.allUsers);
+
+					if (result !== null) {
+						const missed = result;
+						ws.send(JSON.stringify({
+							action: 'missedMsg',
+							missed
+						}));
+					}
+
+					break;
+				}
+
+				case 'message':
+				{
+					const date = Date.now();
+					handler.pushMessage(content.session, content.content,
+						content.groupId, content.author, date);
+
+					ws.send(JSON.stringify({
+						action: 'wellSent',
+						msgId: content.msgId,
+						date
+					}));
+					break;
+				}
+
+				case 'typing-on':
+				{
+					/// TODO: typing-on
+					break;
+				}
+
+				case 'typing-off':
+				{
+					/// TODO: typing-on
+					break;
+				}
+
+
+				default:
+					throw new Error(`Invalid action: ${content.action}`);
+				}
+
+			} catch (e) {
+				ws.send(JSON.stringify({
+					action: 'error',
+					label: String(e)
+				}));
+			}
+		});
+	});
 
 }

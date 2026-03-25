@@ -9,11 +9,13 @@ export function handleSocket(wss: WebSocketServer, handler: Handler) {
 				switch (content.action) {
 				case 'login':
 				{
-					const username = handler.appendSocket(content.session, ws);
-					if (username !== null) {
+					const r = handler.appendSocket(content.session, ws);
+					if (r !== null) {
+						const missed = await handler.countMissedMsg(r.id);
 						ws.send(JSON.stringify({
 							action: 'login-ok',
-							username
+							username: r.username,
+							missed
 						}));
 					} else {
 						throw new Error("Failed to login");

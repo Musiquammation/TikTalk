@@ -13,8 +13,7 @@ export function setupRequests(handler: Handler) {
 		try {
 			const u = await handler.checkUser(email, password);
 			if (u) {
-				const missed = await handler.countMissedMsg(u.id);
-				res.json({ token: u.token, missed });
+				res.json({ token: u.token });
 			} else {
 				res.status(401).json({ error: 'Invalid credentials' });
 			}
@@ -29,8 +28,7 @@ export function setupRequests(handler: Handler) {
 		const { name, email, password } = req.body;
 		try {
 			const u = await handler.createUser(name, email, password);
-			const missed = await handler.countMissedMsg(u.id);
-			res.json({ token: u.token, missed });
+			res.json({ token: u.token });
 
 		} catch (error) {
 			res.status(500).json({ error: error+"" });

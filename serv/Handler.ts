@@ -158,7 +158,7 @@ export class Handler {
 			this.disconnectUser(session);
 		};
 
-		return u.name;
+		return {username: u.name, id: u.id};
 	}
 
 	searchTalker(session: session_t, blacklist: id_t[]) {
@@ -332,7 +332,6 @@ export class Handler {
 			if (!handledIds.has(cid))
 				destIds.push(cid);
 
-		console.log(destIds);
 
 		if (destIds) {
 			this.db.addMissedMessage(content, destIds, u.id, date, groupId);

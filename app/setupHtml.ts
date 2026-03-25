@@ -5,12 +5,20 @@ import { loadGroups } from "./groups";
 
 let publicUsername: string | null = null;
 
+let setConnectionItemResolve: ((name: string)=>void) | null = null;
+
 export function getUsername() {
 	return publicUsername;
 }
 
-export function setUsername(name: string) {
+export function setUsername(name: string | undefined) {
+	if (name === undefined)
+		throw TypeError("Username is undefined");
+
 	publicUsername = name;
+	if (setConnectionItemResolve) {
+		setConnectionItemResolve(name);
+	}
 }
 
 export function setupHtml() {
@@ -45,11 +53,19 @@ export function setupHtml() {
 			if (response.ok) {
 				// Store connection data
 				if (errorDiv) {
-					if (credentials.name !== undefined) 
-						publicUsername = credentials.name;
+					if (credentials.name !== undefined)  {
+						setUsername(credentials.name);
+						localStorage.setItem('tiktalk-connection', JSON.stringify(credentials));
+
+					} else {
+						setConnectionItemResolve = (name: string) => {
+							const sc = {...credentials, name};
+							localStorage.setItem('tiktalk-connection', JSON.stringify(sc));
+							setConnectionItemResolve = null;	
+						};
+					}
 
 					errorDiv.classList.add('hidden');
-					localStorage.setItem('tiktalk-connection', JSON.stringify(credentials));
 				}
 	
 	
@@ -64,7 +80,7 @@ export function setupHtml() {
 			}
 		} catch (e) {
 			if (errorDiv) {
-				errorDiv.textContent = 'Network error';
+				errorDiv.textContent = String(e);
 				errorDiv.classList.remove('hidden');
 			}
 	
@@ -90,18 +106,21 @@ export function setupHtml() {
 	});
 	
 	// Autologin
-	{
+	try {
 		const stored = localStorage.getItem('tiktalk-connection');
-		if (!stored) return;
+		if (!stored)
+			throw new Error("Cannot auto-login");
 	
 		const credentials = JSON.parse(stored) as 
 			{ name: string; email: string; password: string };
 	
-		publicUsername = credentials.name;
+		setUsername(credentials.name);
 		authenticate('login', credentials, null);
 
-		loadGroups(credentials.name);
-	}	
+		loadGroups();
+	} catch (e) {
+		console.error(e);
+	}
 
 	// Disconnect
 	document.getElementById('disconnect')!.addEventListener('click', () => {

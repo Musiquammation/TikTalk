@@ -1,4 +1,4 @@
-import { appendGroup, getGroup, handleMissedGroups } from "./groups";
+import { appendGroup, getGroup, handleMissedGroups, updateGroupStorage } from "./groups";
 import { SERV_SOCK_ADDRESS } from "./servAddresses";
 import { conversation, getTalkRequestStatus, setTalkRequestButton, setUsername } from "./setupHtml";
 
@@ -17,7 +17,6 @@ export function startConnection(data: any) {
 	}
 	
 	const session: string = data.token;
-	handleMissedGroups(data.missed);
 	
 
 	// Update groups
@@ -45,10 +44,11 @@ export function startConnection(data: any) {
 		switch (msg.action) {
 		case 'login-ok':
 			setUsername(msg.username);
+			handleMissedGroups(msg.missed);
 			break;
 
 		case 'askTalk':
-			console.log("Ask talk ok");
+			console.log("Task request received");
 			break;
 
 		case 'group':
@@ -82,11 +82,16 @@ export function startConnection(data: any) {
 
 
 			const group = getGroup();
+			group.missed = 0;
+
 			
+			// Add missed messages
 			for (const m of missedList) {
 				const a = group.users.indexOf(m.author);
 				conversation.add(m.content, a, m.date);
 			}
+
+			updateGroupStorage();
 
 			break;
 		}
@@ -94,14 +99,12 @@ export function startConnection(data: any) {
 		case 'push':
 		{
 			conversation.add(msg.content, msg.author, msg.date);
-			console.log(msg.content);
 			break;
 		}
 
 		case 'wellSent':
 		{
 			conversation.markAsSent(msg.msgId, msg.date);
-			console.log(msg.msgId);
 			break;
 		}
 

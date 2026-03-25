@@ -124,7 +124,6 @@ export class Conversation {
 		this.panel.appendChild(this.buildInputBar(eventHandler));
 
 		// Load first 2 blocks
-		console.log(record.messages);
 		await this.loadBlock(record.messages);
 		await this.loadBlock(record.messages);
 

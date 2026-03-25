@@ -1,5 +1,5 @@
 import { sendGroupOpen, sendMessage } from "./net";
-import { getUsername, conversation } from "./setupHtml";
+import { conversation, getUsername } from "./setupHtml";
 
 interface Group {
 	users: string[];
@@ -13,7 +13,14 @@ interface Group {
 
 export const groups = new Array<Group>();
 let currentGroup: Group | null = null;
-let currentGroupStorage: string | null = null;
+
+function generateStorageItemName() {
+	const username = getUsername();
+	if (username === null)
+		throw new Error("Group pool not specified");
+
+	return "tiktalk-groups:" + username;
+}
 
 const html_groupList = document.getElementById("groupList")!;
 
@@ -72,13 +79,12 @@ export function openGroup(id: string, username: string) {
 }
 
 
-export function loadGroups(id: string) {
-	currentGroupStorage = "tiktalk-groups:" + id;
+export function loadGroups() {
 	// Empty data
 	html_groupList.innerHTML = "";
 	groups.length = 0;
 
-	const str = localStorage.getItem(currentGroupStorage);
+	const str = localStorage.getItem(generateStorageItemName());
 	if (!str) {
 		return;
 	}
@@ -105,11 +111,7 @@ export function loadGroups(id: string) {
 }
 
 export function updateGroupStorage() {
-	if (currentGroupStorage === null)
-		throw new Error("Group not specified");
-
-	localStorage.setItem(currentGroupStorage, JSON.stringify(groups));
-	console.log(groups);
+	localStorage.setItem(generateStorageItemName(), JSON.stringify(groups));
 }
 
 
@@ -204,5 +206,4 @@ export function getGroup(id: string | null = null) {
 
 export function closeGroups() {
 	updateGroupStorage();
-	currentGroupStorage = null;
 }

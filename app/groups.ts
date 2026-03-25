@@ -34,6 +34,7 @@ function onGroupClick(e: PointerEvent) {
 }
 
 function createHTML(group: Group) {
+	console.log(group.usernames);
 	const div = document.createElement("div");
 	let innerHTML = `<span>${group.usernames?.join(", ")}</span>`;
 	if (group.missed > 0)
@@ -58,11 +59,11 @@ export function openGroup(id: string, username: string) {
 	const usernames = [
 		...group.usernames.slice(0, group.pos),
 		username,
-		...group.usernames.splice(group.pos)
+		...group.usernames.slice(group.pos)
 	];
 
 	// Open html panel
-	conversation.open(id, usernames, {
+	conversation.open(id, group.pos, usernames, {
 		send(content, msgId) {
 			sendMessage(content, id, group.pos, msgId);
 		},
@@ -77,7 +78,6 @@ export function openGroup(id: string, username: string) {
 	sendGroupOpen(id);
 
 }
-
 
 export function loadGroups() {
 	// Empty data
@@ -111,6 +111,7 @@ export function loadGroups() {
 }
 
 export function updateGroupStorage() {
+	console.log(groups[0]);
 	localStorage.setItem(generateStorageItemName(), JSON.stringify(groups));
 }
 
@@ -164,7 +165,6 @@ export function updateGroup(group: Group) {
     }
 }
 
-
 export function handleMissedGroups(missed: Missed[]) {
 	for (const m of missed) {
 		let group = groups.find(g => g.id === m.group);
@@ -173,13 +173,26 @@ export function handleMissedGroups(missed: Missed[]) {
 		}
 
 		group.missed = m.count;
-		group.lastMsg = m.date;
+		group.lastMsg = m.date*1000;
 		updateGroup(group);
 	}
 
 	updateGroupStorage();
 }
 
+export function incMissedMsgInGroup(id: string, date: number, inc = 1) {
+    const group = groups.find(g => g.id === id);
+    if (!group) {
+        throw new Error("Cannot find group " + id);
+    }
+
+    group.missed = (group.missed ?? 0) + inc;
+	if (date > group.lastMsg)
+    	group.lastMsg = date;
+
+    updateGroup(group);
+    updateGroupStorage();
+}
 
 export function appendGroup(group: Group) {
 	updateGroup(group);

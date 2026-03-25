@@ -1,4 +1,4 @@
-import { appendGroup, getGroup, handleMissedGroups, updateGroupStorage } from "./groups";
+import { appendGroup, getGroup, handleMissedGroups, incMissedMsgInGroup, updateGroupStorage } from "./groups";
 import { SERV_SOCK_ADDRESS } from "./servAddresses";
 import { conversation, getTalkRequestStatus, setTalkRequestButton, setUsername } from "./setupHtml";
 
@@ -88,7 +88,7 @@ export function startConnection(data: any) {
 			// Add missed messages
 			for (const m of missedList) {
 				const a = group.users.indexOf(m.author);
-				conversation.add(m.content, a, m.date);
+				conversation.add(m.content, a, m.date*1000);
 			}
 
 			updateGroupStorage();
@@ -107,6 +107,14 @@ export function startConnection(data: any) {
 			conversation.markAsSent(msg.msgId, msg.date);
 			break;
 		}
+
+		case 'miss':
+		{
+			console.log("Miss of", msg.author);
+			incMissedMsgInGroup(msg.groupId, msg.date);
+			break;
+		}
+
 
 
 		case 'error':

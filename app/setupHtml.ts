@@ -19,6 +19,7 @@ export function setUsername(name: string | undefined) {
 	if (setConnectionItemResolve) {
 		setConnectionItemResolve(name);
 	}
+
 }
 
 export function setupHtml() {
@@ -61,7 +62,8 @@ export function setupHtml() {
 						setConnectionItemResolve = (name: string) => {
 							const sc = {...credentials, name};
 							localStorage.setItem('tiktalk-connection', JSON.stringify(sc));
-							setConnectionItemResolve = null;	
+							setConnectionItemResolve = null;
+							loadGroups();
 						};
 					}
 

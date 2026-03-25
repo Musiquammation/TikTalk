@@ -37,6 +37,8 @@ export class Conversation {
 	// Pending (waiting) messages: temp id → { element, content, date }
 	private pendingMessages = new Map<number, { el: HTMLDivElement; content: string; date: number }>();
 
+	private pos = -1;
+
 	constructor(panel: HTMLDivElement) {
 		this.panel = panel;
 		this.panel.classList.add("conv-panel");
@@ -95,7 +97,8 @@ export class Conversation {
 	 * Creates the conversation in the DB if it doesn't exist.
 	 * Loads the first 2 blocks of messages.
 	 */
-	async open(id: string, usernames: string[], eventHandler: EventHandler): Promise<void> {
+	async open(id: string, pos: number, usernames: string[], eventHandler: EventHandler) {
+		this.pos = pos;
 		this.currentId = id;
 		this.usernames = usernames;
 		this.loadedBlocks = 0;
@@ -214,8 +217,12 @@ export class Conversation {
 		pending.el.classList.remove("waiting");
 		this.pendingMessages.delete(id);
 
-		// Persist to DB (author index 0 = local user by convention)
-		const message: Message = { content: pending.content, author: 0, date: pending.date };
+		// Persist to DB
+		const message: Message = {
+			content: pending.content,
+			author: this.pos,
+			date: pending.date
+		};
 
 		const record = await this.getRecord(this.currentId);
 		if (!record) throw new Error(`Conversation "${this.currentId}" not found.`);
@@ -246,7 +253,15 @@ export class Conversation {
 
 	private buildMessageEl(msg: Message): HTMLDivElement {
 		const wrapper = document.createElement("div");
-		const username = this.usernames[msg.author] ?? `User ${msg.author}`;
+		console.log(this.usernames);
+		let username: string;
+		if (msg.author === this.pos) {
+			username = "You";
+		} else {
+			username = this.usernames[msg.author] ?? `User ${msg.author}`;
+		}
+
+
 		wrapper.className = `conv-message conv-message--${msg.author % 2 === 0 ? "left" : "right"}`;
 		wrapper.dataset.date = String(msg.date);
 
@@ -271,7 +286,7 @@ export class Conversation {
 	}
 
 	private buildWaitingMessageEl(content: string, date: number, id: number): HTMLDivElement {
-		const username = this.usernames[0] ?? "Me";
+		const username = "You";
 		const wrapper = document.createElement("div");
 		wrapper.className = "conv-message conv-message--right waiting";
 		wrapper.dataset.pendingId = String(id);
@@ -313,7 +328,7 @@ export class Conversation {
 		let lastKey: string | null = null;
 
 		for (const msg of messages) {
-			const ts = Number(msg.dataset.date) * 1000;
+			const ts = Number(msg.dataset.date);
 			const key = this.toDateKey(ts);
 			if (key !== lastKey) {
 				lastKey = key;

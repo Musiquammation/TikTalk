@@ -10,8 +10,8 @@ class Group {
 	users: session_t[];
 	allUsers: id_t[];
 
-	constructor(first: session_t, allUsers: id_t[]) {
-		this.users = [first];
+	constructor(users: session_t[], allUsers: id_t[]) {
+		this.users = users;
 		this.allUsers = allUsers;
 	}
 
@@ -19,7 +19,6 @@ class Group {
 		if (!this.users.includes(session)) {
 			this.users.push(session);
 		}
-
 	}
 
 	removeUser(session: session_t) {
@@ -139,9 +138,18 @@ export class Handler {
 	}
 
 	disconnectUser(session: session_t) {
+		// Remove session from groups
+		for (const [groupId, group] of this.groups) {
+			group.removeUser(session);
+			if (group.users.length === 0) {
+				this.groups.delete(groupId);
+			}
+		}
+
 		this.users.delete(session);
 		this.talkRequests = this.talkRequests.filter(r => r.session !== session);
 	}
+
 
 	countMissedMsg(userId: string) {
 		return this.db.countMissedMsg(userId);
@@ -149,16 +157,22 @@ export class Handler {
 
 	appendSocket(session: session_t, ws: WebSocket) {
 		const u = this.users.get(session);
-		if (!u)
-			return null;
+		if (!u) return null;
 
 		u.ws = ws;
+
+		// Add session in groups
+		for (const [_, group] of this.groups) {
+			if (group.allUsers.includes(u.id)) {
+				group.addUser(session);
+			}
+		}
 
 		ws.onclose = () => {
 			this.disconnectUser(session);
 		};
 
-		return {username: u.name, id: u.id};
+		return { username: u.name, id: u.id };
 	}
 
 	searchTalker(session: session_t, blacklist: id_t[]) {
@@ -248,15 +262,7 @@ export class Handler {
 		}
 
 		// Quit previous group
-		if (u.group !== null) {
-			const group = this.groups.get(u.group);
-			if (group) {
-				group.removeUser(session);
-				if (group.users.length === 0) {
-					this.groups.delete(u.group);
-				}
-			}
-		}
+		u.group = null;
 
 
 		// Enter new group
@@ -273,12 +279,13 @@ export class Handler {
 			throw new Error("allUsers list does not match groupId");
 		}
 
-		// Check for group
-		const group = this.groups.get(groupId);
-		if (group) {
-			group.addUser(session);
-		} else {
-			this.groups.set(groupId, new Group(session, allUsers));
+		// Create group
+		if (!this.groups.has(groupId)) {
+			const activeSessions = [...this.users.entries()]
+				.filter(([_, u]) => allUsers.includes(u.id))
+				.map(([s]) => s);
+
+			this.groups.set(groupId, new Group(activeSessions, allUsers));
 		}
 
 		u.group = groupId;
@@ -308,33 +315,46 @@ export class Handler {
 		handledIds.add(u.id);
 
 		// Send message to connected users
+		console.log(group.users);
 		for (const us of group.users) {
 			if (us === session)
-				continue;
+				continue; // same user
 
 			const user = this.users.get(us);
 			if (!user || !user.ws)
 				continue;
 
-			user.ws.send(JSON.stringify({
-				action: 'push',
-				content,
-				author,
-				date
-			}));
 
-			handledIds.add(user.id);
+			// Check group
+			if (user.group === groupId) {
+				user.ws.send(JSON.stringify({
+					action: 'push',
+					content,
+					author,
+					date
+				}));
+
+				handledIds.add(user.id);
+
+			} else {
+				user.ws.send(JSON.stringify({
+					action: 'miss',
+					groupId,
+					author,
+					date
+				}));
+			}
 		}
 
 		// Save missed messages
-		const destIds = [];
+		const missersIds = [];
 		for (const cid of group.allUsers)
 			if (!handledIds.has(cid))
-				destIds.push(cid);
+				missersIds.push(cid);
 
 
-		if (destIds) {
-			this.db.addMissedMessage(content, destIds, u.id, date, groupId);
+		if (missersIds) {
+			this.db.addMissedMessage(content, missersIds, u.id, date, groupId);
 		}
 	}
 }

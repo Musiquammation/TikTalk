@@ -1,6 +1,7 @@
 import { sendGroupOpen, sendMessage } from "./net";
 import { conversation, getUsername } from "./setupHtml";
 
+
 interface Group {
 	users: string[];
 	usernames: string[];
@@ -34,7 +35,6 @@ function onGroupClick(e: PointerEvent) {
 }
 
 function createHTML(group: Group) {
-	console.log(group.usernames);
 	const div = document.createElement("div");
 	let innerHTML = `<span>${group.usernames?.join(", ")}</span>`;
 	if (group.missed > 0)
@@ -214,6 +214,23 @@ export function getGroup(id: string | null = null) {
 	}
 
 	return group;
+}
+
+
+export function collectBlacklist(couldown: number): string[] {
+	if (currentGroup === null)
+		return [];
+
+	const blacklist = new Set<string>();
+	const now = Date.now();
+
+	for (const group of groups)
+		if (now - group.lastMsg >= couldown)
+			for (const user of group.users)	
+				blacklist.add(user);
+
+
+	return Array.from(blacklist);
 }
 
 

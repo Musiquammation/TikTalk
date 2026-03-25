@@ -1,7 +1,9 @@
-import { appendGroup, getGroup, handleMissedGroups, incMissedMsgInGroup, updateGroupStorage } from "./groups";
+import { appendGroup, collectBlacklist, getGroup, handleMissedGroups, incMissedMsgInGroup, updateGroupStorage } from "./groups";
 import { SERV_SOCK_ADDRESS } from "./servAddresses";
 import { conversation, getTalkRequestStatus, setTalkRequestButton, setUsername } from "./setupHtml";
 
+
+const BLACKLIST_COULDOWN = 60 * 60000; // 60mn
 
 interface Global {
 	socket: WebSocket;
@@ -150,7 +152,7 @@ function sendTalkRequest() {
 	global.socket.send(JSON.stringify({
 		action: 'askTalk',
 		session: global.session,
-		blacklist: []
+		blacklist: collectBlacklist(BLACKLIST_COULDOWN)
 	}));
 }
 

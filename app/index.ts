@@ -1,4 +1,5 @@
 import { setupHtml } from "./setupHtml";
 
-
-setupHtml();
+export function startApp() {
+    setupHtml();
+}

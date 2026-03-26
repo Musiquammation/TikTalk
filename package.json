@@ -2,7 +2,8 @@
 	"name": "tiktalk",
 	"scripts": {
 		"server": "node serv/server.ts",
-		"client": "vite"
+		"client": "vite",
+		"build": "npx esbuild app/index.ts --bundle --outfile=dist/bundle.js"
 	},
 	"type": "module",
 	"author": "",
@@ -19,6 +20,7 @@
 	"devDependencies": {
 		"@types/cors": "^2.8.19",
 		"@types/express": "^5.0.6",
-		"@types/pg": "^8.18.0"
+		"@types/pg": "^8.18.0",
+		"esbuild": "^0.27.4"
 	}
 }

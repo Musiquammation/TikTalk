@@ -1,5 +1,8 @@
 import { setupHtml } from "./setupHtml";
 
-export function startApp() {
+function startApp() {
     setupHtml();
 }
+
+// Publish startApp
+(window as any).startApp = startApp;

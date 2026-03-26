@@ -193,6 +193,20 @@ export function incMissedMsgInGroup(id: string, date: number, inc = 1) {
     updateGroupStorage();
 }
 
+export function resetMissedMsgInGroup(id: string, date: number) {
+    const group = groups.find(g => g.id === id);
+    if (!group) {
+        throw new Error("Cannot find group " + id);
+    }
+
+    group.missed = 0;
+	if (date > group.lastMsg)
+    	group.lastMsg = date;
+
+    updateGroup(group);
+    updateGroupStorage();
+}
+
 export function appendGroup(group: Group) {
 	updateGroup(group);
 	updateGroupStorage();

@@ -1,4 +1,4 @@
-import { appendGroup, collectBlacklist, getGroup, handleMissedGroups, incMissedMsgInGroup, updateGroupStorage } from "./groups";
+import { appendGroup, collectBlacklist, getGroup, handleMissedGroups, incMissedMsgInGroup, resetMissedMsgInGroup, updateGroupStorage } from "./groups";
 import { SERV_SOCK_ADDRESS } from "./servAddresses";
 import { conversation, getTalkRequestStatus, getUserId, setTalkRequestButton, setUsername } from "./setupHtml";
 
@@ -82,17 +82,27 @@ export function startConnection(data: any) {
 				author: string;
 			}[];
 
+			console.log(missedList);
+
 			console.log("Connected are:", msg.connected);
 
 
+			const date = missedList.length>0 ?
+				missedList[missedList.length-1].date :
+				Date.now();
+
 			const group = getGroup();
-			group.missed = 0;
+			resetMissedMsgInGroup(group.id, date);
 
 			
 			// Add missed messages
 			for (const m of missedList) {
-				const a = group.users.indexOf(m.author);
-				conversation.add(m.content, a, m.date*1000);
+				let idx = group.users.indexOf(m.author);
+				if (idx >= group.pos)
+					idx++;
+
+				console.log(idx);
+				conversation.add(m.content, idx, m.date*1000);
 			}
 
 			updateGroupStorage();

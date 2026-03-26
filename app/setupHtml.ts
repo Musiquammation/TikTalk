@@ -26,7 +26,96 @@ export function setUsername(name: string | undefined, id: string) {
 	if (setConnectionItemResolve) {
 		setConnectionItemResolve(name, id);
 	}
+
+	openHtmlPage('app');
 }
+
+
+
+let talkRequestState: 'talk' | 'cancel' | 'canceling' = 'talk';
+
+export function setTalkRequestButton(talk: 'talk' | 'cancel' | 'canceling') {
+	talkRequestState = talk;
+
+	const btn = document.getElementById('talk')!;
+
+	btn.classList.remove('talk', 'cancel', 'canceling');
+
+	switch (talk) {
+	case "talk":
+		btn.classList.add('talk');
+		btn.textContent = "Talk";
+		break;
+
+	case "cancel":
+		btn.classList.add('cancel');
+		btn.textContent = "Cancel";
+		break;
+
+	case "canceling":
+		btn.classList.add('Canceling');
+		btn.textContent = "Canceling";
+		break;
+	}
+}
+
+export function getTalkRequestStatus() {
+	return talkRequestState;
+}
+
+
+export const conversation = new Conversation(
+	document.getElementById("conv")! as HTMLDivElement,
+);
+
+
+
+export function openHtmlPage(label: 'loginPage' | 'app' | 'account') {
+	const list = document.querySelectorAll(".page");
+
+	for (const i of list) {
+		if (i.id === label) {
+			i.classList.remove('hidden');
+		} else {
+			i.classList.add('hidden');
+		}
+	}
+
+	switch (label) {
+	case 'app':
+		focusOnAppPanel();
+		break;
+	}
+}
+
+
+
+const panel   = document.getElementById('sidePanel')!;
+const overlay = document.getElementById('sidePanelOverlay')!;
+
+export function focusOnAppPanel() {
+	panel.classList.add('open');
+	overlay.classList.add('open');
+}
+
+export function focusOnAppConv() {
+	panel.classList.remove('open');
+	overlay.classList.remove('open');
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 export function setupHtml() {
 	// Toggle forms
@@ -140,41 +229,13 @@ export function setupHtml() {
 			setTalkRequestButton(t);
 		}
 	});
+
+	
+	
+	document.getElementById('sidePanelOverlay')!
+		.addEventListener('click', focusOnAppConv);
+
+
+	openHtmlPage('loginPage');
+	
 }
-
-
-let talkRequestState: 'talk' | 'cancel' | 'canceling' = 'talk';
-
-export function setTalkRequestButton(talk: 'talk' | 'cancel' | 'canceling') {
-	talkRequestState = talk;
-
-	const btn = document.getElementById('talk')!;
-
-	btn.classList.remove('talk', 'cancel', 'canceling');
-
-	switch (talk) {
-	case "talk":
-		btn.classList.add('talk');
-		btn.textContent = "Talk";
-		break;
-
-	case "cancel":
-		btn.classList.add('cancel');
-		btn.textContent = "Cancel";
-		break;
-
-	case "canceling":
-		btn.classList.add('Canceling');
-		btn.textContent = "Canceling";
-		break;
-	}
-}
-
-export function getTalkRequestStatus() {
-	return talkRequestState;
-}
-
-
-export const conversation = new Conversation(
-	document.getElementById("conv")! as HTMLDivElement,
-);

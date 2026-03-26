@@ -1,11 +1,19 @@
+import { focusOnAppConv, focusOnAppPanel } from "./setupHtml";
+
 interface Message {
 	content: string;
 	author: number;
 	date: number;
 }
 
-interface ConversationRecord {
-	id: string;
+interface ConversationMeta {
+	id: string;         // `${convId}_meta`
+	totalMessages: number;
+	blockCount: number;
+}
+
+interface ConversationBlock {
+	id: string;         // `${convId}_${blockIndex}`
 	messages: Message[];
 }
 
@@ -27,6 +35,7 @@ export class Conversation {
 	private usernames: string[] = [];
 	private loadedBlocks: number = 0;
 	private totalMessages: number = 0;
+	private blockCount: number = 0;
 
 	// DOM elements
 	private messagesEl: HTMLDivElement | null = null;
@@ -72,36 +81,104 @@ export class Conversation {
 		});
 	}
 
-	private async getRecord(id: string): Promise<ConversationRecord | undefined> {
+	private async dbGet<T>(id: string): Promise<T | undefined> {
 		const db = await this.openDB();
 		return new Promise((resolve, reject) => {
 			const tx = db.transaction(Conversation.STORE_NAME, "readonly");
-			const store = tx.objectStore(Conversation.STORE_NAME);
-			const req = store.get(id);
-			req.onsuccess = () => resolve(req.result as ConversationRecord | undefined);
+			const req = tx.objectStore(Conversation.STORE_NAME).get(id);
+			req.onsuccess = () => resolve(req.result as T | undefined);
 			req.onerror = () => reject(req.error);
 		});
 	}
 
-	private async putRecord(record: ConversationRecord): Promise<void> {
+	private async dbPut(record: ConversationMeta | ConversationBlock): Promise<void> {
 		const db = await this.openDB();
 		return new Promise((resolve, reject) => {
 			const tx = db.transaction(Conversation.STORE_NAME, "readwrite");
-			const store = tx.objectStore(Conversation.STORE_NAME);
-			const req = store.put(record);
+			const req = tx.objectStore(Conversation.STORE_NAME).put(record);
 			req.onsuccess = () => resolve();
 			req.onerror = () => reject(req.error);
 		});
+	}
+
+	// ─── Meta & block helpers ─────────────────────────────────────────────────
+
+	private metaId(convId: string): string {
+		return `${convId}_meta`;
+	}
+
+	private blockId(convId: string, blockIndex: number): string {
+		return `${convId}_${blockIndex}`;
+	}
+
+	private async getMeta(convId: string): Promise<ConversationMeta | undefined> {
+		return this.dbGet<ConversationMeta>(this.metaId(convId));
+	}
+
+	private async getBlock(convId: string, blockIndex: number): Promise<ConversationBlock | undefined> {
+		return this.dbGet<ConversationBlock>(this.blockId(convId, blockIndex));
+	}
+
+	/**
+	 * Appends a message to the last block, creating a new one if the current
+	 * block is full (>= BLOCK_SIZE). Persists both the block and the meta.
+	 * Returns the block the message was written into.
+	 */
+	private async pushMessage(convId: string, message: Message): Promise<ConversationBlock> {
+		let meta = await this.getMeta(convId);
+
+		// Bootstrap: first message ever in this conversation
+		if (!meta) {
+			meta = { id: this.metaId(convId), totalMessages: 0, blockCount: 0 };
+		}
+
+		let targetBlock: ConversationBlock;
+
+		if (meta.blockCount === 0) {
+			// No block yet — create the first one
+			targetBlock = { id: this.blockId(convId, 0), messages: [] };
+			meta.blockCount = 1;
+		} else {
+			const lastIndex = meta.blockCount - 1;
+			const lastBlock = await this.getBlock(convId, lastIndex);
+
+			if (!lastBlock) {
+				throw new Error(`Block ${lastIndex} missing for conversation "${convId}".`);
+			}
+
+			if (lastBlock.messages.length >= Conversation.BLOCK_SIZE) {
+				// Last block is full — start a new one
+				targetBlock = { id: this.blockId(convId, meta.blockCount), messages: [] };
+				meta.blockCount++;
+			} else {
+				targetBlock = lastBlock;
+			}
+		}
+
+		targetBlock.messages.push(message);
+		meta.totalMessages++;
+
+		// Persist atomically (best-effort; IDB doesn't support cross-store XA)
+		await this.dbPut(targetBlock);
+		await this.dbPut(meta);
+
+		// Keep cached counts in sync
+		this.totalMessages = meta.totalMessages;
+		this.blockCount = meta.blockCount;
+
+		return targetBlock;
 	}
 
 	// ─── Public API ───────────────────────────────────────────────────────────
 
 	/**
 	 * Opens the conversation in the panel.
-	 * Creates the conversation in the DB if it doesn't exist.
+	 * Creates the conversation meta in the DB if it doesn't exist.
 	 * Loads the first 2 blocks of messages.
 	 */
 	async open(id: string, pos: number, usernames: string[], eventHandler: EventHandler) {
+		focusOnAppConv();
+
 		this.pos = pos;
 		this.currentId = id;
 		this.usernames = usernames;
@@ -114,13 +191,14 @@ export class Conversation {
 			this.typingEl = null;
 		}
 
-		// Ensure record exists in DB
-		let record = await this.getRecord(id);
-		if (!record) {
-			record = { id, messages: [] };
-			await this.putRecord(record);
+		// Ensure meta exists in DB
+		let meta = await this.getMeta(id);
+		if (!meta) {
+			meta = { id: this.metaId(id), totalMessages: 0, blockCount: 0 };
+			await this.dbPut(meta);
 		}
-		this.totalMessages = record.messages.length;
+		this.totalMessages = meta.totalMessages;
+		this.blockCount = meta.blockCount;
 
 		// Build panel DOM
 		this.panel.innerHTML = "";
@@ -144,11 +222,11 @@ export class Conversation {
 		this.panel.appendChild(this.buildInputBar(eventHandler));
 
 		// Load first 2 blocks
-		await this.loadBlock(record.messages);
-		await this.loadBlock(record.messages);
+		await this.loadBlock();
+		await this.loadBlock();
 
 		this.updateLoader();
-		this.setupScrollLoader(record.messages);
+		this.setupScrollLoader();
 	}
 
 	/**
@@ -158,19 +236,10 @@ export class Conversation {
 		if (!this.currentId) throw new Error("No conversation open.");
 
 		const message: Message = { content: msg, author, date };
-
-		const record = await this.getRecord(this.currentId);
-		if (!record) throw new Error(`Conversation "${this.currentId}" not found.`);
-
-		record.messages.push(message);
-		await this.putRecord(record);
-
-		this.totalMessages = record.messages.length;
+		await this.pushMessage(this.currentId, message);
 
 		// Only render if the message falls in an already-loaded range
-		const msgIndex = record.messages.length - 1;
-		const loadedCount = this.loadedBlocks * Conversation.BLOCK_SIZE;
-		if (msgIndex < loadedCount && this.messagesEl) {
+		if (this.messagesEl) {
 			this.messagesEl.appendChild(this.buildMessageEl(message));
 			this.scrollToBottom();
 		}
@@ -180,17 +249,23 @@ export class Conversation {
 
 	// ─── Block loading ────────────────────────────────────────────────────────
 
-	private async loadBlock(messages: Message[]): Promise<void> {
-		if (!this.messagesEl) return;
+	/**
+	 * Loads the next older block into the DOM.
+	 * Blocks are stored from index 0 (oldest) to blockCount-1 (newest).
+	 * We load newest-first, so the first call loads blockCount-1, then blockCount-2, etc.
+	 */
+	private async loadBlock(): Promise<void> {
+		if (!this.messagesEl || !this.currentId) return;
 
-		const start = this.loadedBlocks * Conversation.BLOCK_SIZE;
-		const end = Math.min(start + Conversation.BLOCK_SIZE, messages.length);
+		const blockIndex = this.blockCount - 1 - this.loadedBlocks;
+		if (blockIndex < 0) return;
 
-		if (start >= messages.length) return;
+		const block = await this.getBlock(this.currentId, blockIndex);
+		if (!block || block.messages.length === 0) return;
 
 		const fragment = document.createDocumentFragment();
-		for (let i = start; i < end; i++) {
-			fragment.appendChild(this.buildMessageEl(messages[i]));
+		for (const msg of block.messages) {
+			fragment.appendChild(this.buildMessageEl(msg));
 		}
 
 		if (this.loadedBlocks === 0) {
@@ -207,14 +282,13 @@ export class Conversation {
 		this.loadedBlocks++;
 	}
 
-
-	private setupScrollLoader(messages: Message[]): void {
+	private setupScrollLoader(): void {
 		if (!this.messagesEl) return;
 		this.messagesEl.addEventListener("scroll", async () => {
 			if (this.messagesEl!.scrollTop < 80) {
 				const loadedCount = this.loadedBlocks * Conversation.BLOCK_SIZE;
-				if (loadedCount < messages.length) {
-					await this.loadBlock(messages);
+				if (loadedCount < this.totalMessages) {
+					await this.loadBlock();
 					this.updateLoader();
 				}
 			}
@@ -238,16 +312,10 @@ export class Conversation {
 		const message: Message = {
 			content: pending.content,
 			author: this.pos,
-			date: pending.date
+			date: pending.date,
 		};
 
-		const record = await this.getRecord(this.currentId);
-		if (!record) throw new Error(`Conversation "${this.currentId}" not found.`);
-
-		record.messages.push(message);
-		await this.putRecord(record);
-
-		this.totalMessages = record.messages.length;
+		await this.pushMessage(this.currentId, message);
 		this.updateLoader();
 	}
 
@@ -257,6 +325,10 @@ export class Conversation {
 		const header = document.createElement("div");
 		header.className = "conv-header";
 
+		const menuBtn = document.createElement("button");
+		menuBtn.id = "convMenuBtn";
+		menuBtn.textContent = "☰";
+
 		const title = document.createElement("span");
 		title.className = "conv-title";
 		title.textContent =
@@ -264,21 +336,21 @@ export class Conversation {
 				? usernames.join(" & ")
 				: `${usernames[0]} + ${usernames.length - 1} others`;
 
-		header.appendChild(title);
+		header.append(menuBtn, title);
+
+		menuBtn.addEventListener("click", focusOnAppPanel);
+
 		return header;
 	}
 
 	private buildMessageEl(msg: Message): HTMLDivElement {
 		const wrapper = document.createElement("div");
-		let username: string;
-		if (msg.author === this.pos) {
-			username = "You";
-		} else {
-			username = this.usernames[msg.author] ?? `User ${msg.author}`;
-		}
+		const username =
+			msg.author === this.pos
+				? "You"
+				: (this.usernames[this.getIdx(msg.author)] ?? `User ${msg.author}`);
 
-
-		wrapper.className = `conv-message conv-message--${msg.author % 2 === 0 ? "left" : "right"}`;
+		wrapper.className = `conv-message conv-message--${msg.author === this.pos ? "right" : "left"}`;
 		wrapper.dataset.date = String(msg.date);
 
 		const meta = document.createElement("div");
@@ -302,7 +374,6 @@ export class Conversation {
 	}
 
 	private buildWaitingMessageEl(content: string, date: number, id: number): HTMLDivElement {
-		const username = "You";
 		const wrapper = document.createElement("div");
 		wrapper.className = "conv-message conv-message--right waiting";
 		wrapper.dataset.pendingId = String(id);
@@ -313,7 +384,7 @@ export class Conversation {
 
 		const authorEl = document.createElement("span");
 		authorEl.className = "conv-meta__author";
-		authorEl.textContent = username;
+		authorEl.textContent = "You";
 
 		const contentEl = document.createElement("span");
 		contentEl.className = "conv-meta__content";
@@ -337,8 +408,7 @@ export class Conversation {
 	}
 
 	private rebuildDateSeparators(container: HTMLElement): void {
-		// Supprimer les séparateurs existants
-		container.querySelectorAll(".conv-date-separator").forEach(el => el.remove());
+		container.querySelectorAll(".conv-date-separator").forEach((el) => el.remove());
 
 		const messages = Array.from(container.querySelectorAll<HTMLElement>(".conv-message[data-date]"));
 		let lastKey: string | null = null;
@@ -352,11 +422,6 @@ export class Conversation {
 			}
 		}
 	}
-
-
-
-
-
 
 	private buildLoader(): HTMLDivElement {
 		const loader = document.createElement("div");
@@ -379,8 +444,6 @@ export class Conversation {
 		this.sendBtn.className = "conv-send-btn";
 		this.sendBtn.textContent = "Send";
 
-		// Typing indicator: fires typing(true) on first keystroke,
-		// typing(false) after 1.5 s of inactivity.
 		let typingActive = false;
 		let typingTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -397,7 +460,6 @@ export class Conversation {
 			}, 1500);
 		});
 
-		// Send on Enter
 		this.inputEl.addEventListener("keydown", (e) => {
 			if (e.key === "Enter") this.handleSend(eventHandler);
 		});
@@ -417,7 +479,6 @@ export class Conversation {
 		const id = Math.floor(Math.random() * 2 ** 31);
 		const date = Date.now();
 
-		// Render the bubble immediately as waiting (not yet in DB)
 		const el = this.buildWaitingMessageEl(content, date, id);
 		this.messagesEl.appendChild(el);
 		this.scrollToBottom();
@@ -431,8 +492,7 @@ export class Conversation {
 
 	private updateLoader(): void {
 		if (!this.loaderEl) return;
-		const loadedCount = this.loadedBlocks * Conversation.BLOCK_SIZE;
-		const allLoaded = loadedCount >= this.totalMessages;
+		const allLoaded = this.loadedBlocks >= this.blockCount;
 		this.loaderEl.style.display = allLoaded ? "none" : "flex";
 	}
 
@@ -457,7 +517,7 @@ export class Conversation {
 	private formatDateSeparator(timestamp: number): string {
 		const now = new Date();
 		const d = new Date(timestamp);
-		const diffDays = Math.floor((now.setHours(0,0,0,0) - d.setHours(0,0,0,0)) / 86400000);
+		const diffDays = Math.floor((now.setHours(0, 0, 0, 0) - d.setHours(0, 0, 0, 0)) / 86400000);
 
 		if (diffDays === 0) return "Today";
 		if (diffDays === 1) return "Yesterday";
@@ -465,15 +525,14 @@ export class Conversation {
 		return new Intl.DateTimeFormat("en-US", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(timestamp));
 	}
 
+	private getIdx(idx: number): number {
+		return idx < this.pos ? idx : idx - 1;
+	}
 
+	// ─── Typing management ────────────────────────────────────────────────────
 
-
-
-	// ─── Typing management ─────────────────────────────────────────────────────
 	addTyping(author: number) {
-		// Ignore current user
 		if (author === this.pos || author < 0) return;
-
 		this.typingAuthors.add(author);
 		this.updateTypingUI();
 	}
@@ -486,11 +545,8 @@ export class Conversation {
 	private updateTypingUI() {
 		if (!this.typingEl) return;
 
-
-		// No one typing → hide indicator and stop animation
 		if (this.typingAuthors.size === 0) {
 			this.typingEl.style.display = "none";
-
 			if (this.typingInterval) {
 				clearInterval(this.typingInterval);
 				this.typingInterval = null;
@@ -498,11 +554,11 @@ export class Conversation {
 			return;
 		}
 
-		// Build display names from authors set
-		const names = Array.from(this.typingAuthors)
-			.map(a => this.usernames[a] ?? `User ${a}`);
+		const names = Array.from(this.typingAuthors).map(
+			(a) => this.usernames[this.getIdx(a)] ?? `User ${a}`
+		);
 
-		let text = "";
+		let text: string;
 		if (names.length === 1) {
 			text = `${names[0]} is typing`;
 		} else if (names.length === 2) {
@@ -513,11 +569,8 @@ export class Conversation {
 
 		this.typingEl.style.display = "block";
 
-		// Start / maintain "..." animation
 		let dots = 0;
-
 		if (this.typingInterval) clearInterval(this.typingInterval);
-
 		this.typingInterval = setInterval(() => {
 			dots = (dots + 1) % 4;
 			this.typingEl!.textContent = text + ".".repeat(dots);

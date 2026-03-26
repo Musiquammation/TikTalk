@@ -468,7 +468,7 @@ export class Handler {
 				continue; // same user
 
 			const user = this.users.get(us);
-			if (!user || !user.ws)
+			if (!user || !user.ws || user.group !== groupId)
 				continue;
 
 			user.ws.send(JSON.stringify({

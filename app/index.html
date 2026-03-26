@@ -7,8 +7,7 @@
 	<link rel="stylesheet" href="index.css">
 </head>
 <body>
-	
-	<div id="loginPage">
+	<div id="loginPage" class="page">
 		<div class="login-container" id="loginContainer">
 			<h2>Login to TikTalk</h2>
 			<form id="loginForm">
@@ -46,27 +45,29 @@
 			<div id="registerError" class="error hidden"></div>
 			<p class="switch-form">Already have an account? <a href="#" id="showLogin">Login</a></p>
 		</div>
+	</div>
 
-		<div id="app">
-			<div id="sidePanel">
-				<div id="sideHeader">
-					<button id="talk" class="talk">Talk</button>
-					<button>Account</button>
-				</div>
-				<div id="groupList"></div>
+	<div id="app" class="page hidden">
+		<div id="sidePanelOverlay"></div>
+		
+		<div id="sidePanel">
+			<div id="sideHeader">
+				<button id="talk" class="talk">Talk</button>
+				<button id="accountBtn">Account</button>
 			</div>
-
-			<div id="conv"></div>
+			<div id="groupList"></div>
 		</div>
 
+		<div id="conv"></div>
+	</div>
 
-		<div id="account">
-			<!-- userdata -->
-			<div></div>
 
-			<!-- disconnect button -->
-			<button id="disconnect">Disconnect</button>
-		</div>
+	<div id="account" class="page hidden">
+		<!-- userdata -->
+		<div></div>
+
+		<!-- disconnect button -->
+		<button id="disconnect">Disconnect</button>
 	</div>
 
 	<script>

@@ -6,3 +6,5 @@ function startApp() {
 
 // Publish startApp
 (window as any).startApp = startApp;
+
+startApp();

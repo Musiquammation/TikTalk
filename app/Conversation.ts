@@ -472,7 +472,7 @@ export class Conversation {
 	// ─── Typing management ─────────────────────────────────────────────────────
 	addTyping(author: number) {
 		// Ignore current user
-		if (author === this.pos) return;
+		if (author === this.pos || author < 0) return;
 
 		this.typingAuthors.add(author);
 		this.updateTypingUI();

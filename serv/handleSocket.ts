@@ -15,6 +15,7 @@ export function handleSocket(wss: WebSocketServer, handler: Handler) {
 						ws.send(JSON.stringify({
 							action: 'login-ok',
 							username: r.username,
+							userId: r.id,
 							missed
 						}));
 					} else {
@@ -53,14 +54,16 @@ export function handleSocket(wss: WebSocketServer, handler: Handler) {
 
 				case 'openConv':
 				{
-					const result = await handler.selectGroup(content.session,
+					const resultM = await handler.selectGroup(content.session,
 						content.groupId, content.allUsers);
 
-					if (result !== null) {
-						const missed = result;
+
+					if (resultM !== null) {
+						const r = resultM;
 						ws.send(JSON.stringify({
-							action: 'missedMsg',
-							missed
+							action: 'startConv',
+							missed: r.missed,
+							connected: r.connected,
 						}));
 					}
 

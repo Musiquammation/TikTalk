@@ -1,6 +1,6 @@
 import { appendGroup, collectBlacklist, getGroup, handleMissedGroups, incMissedMsgInGroup, updateGroupStorage } from "./groups";
 import { SERV_SOCK_ADDRESS } from "./servAddresses";
-import { conversation, getTalkRequestStatus, setTalkRequestButton, setUsername } from "./setupHtml";
+import { conversation, getTalkRequestStatus, getUserId, setTalkRequestButton, setUsername } from "./setupHtml";
 
 
 const BLACKLIST_COULDOWN = 60 * 60000; // 60mn
@@ -45,7 +45,7 @@ export function startConnection(data: any) {
 
 		switch (msg.action) {
 		case 'login-ok':
-			setUsername(msg.username);
+			setUsername(msg.username, msg.userId);
 			handleMissedGroups(msg.missed);
 			break;
 
@@ -74,13 +74,15 @@ export function startConnection(data: any) {
 			break;
 		}
 
-		case 'missedMsg':
+		case 'startConv':
 		{
 			const missedList = msg.missed as {
 				content: string;
 				date: number;
 				author: string;
 			}[];
+
+			console.log("Connected are:", msg.connected);
 
 
 			const group = getGroup();
@@ -129,6 +131,22 @@ export function startConnection(data: any) {
 			}
 
 
+			break;
+		}
+
+		case 'enterConv':
+		{
+			console.log(`User #${msg.author} enters`);
+			break;
+		}
+
+		case 'quitConv':
+		{
+			console.log(`User #${msg.author} quits`);
+			if (msg.groupId !== getGroup().id)
+				return;
+
+			conversation.removeTyping(msg.author);
 			break;
 		}
 
@@ -204,11 +222,23 @@ export function sendGroupOpen(groupId: string) {
 	if (!global)
 		throw new Error("No socket to use");
 
+	const userId = getUserId();
+	if (userId === null)
+		throw new TypeError("UserId is undefined");
+
+	const group = getGroup(groupId);
+	const allUsers = [
+		...group.users.slice(0, group.pos),
+		userId,
+		...group.users.slice(group.pos)
+
+	];
+
 	global.socket.send(JSON.stringify({
 		action: 'openConv',
 		session: global.session,
 		groupId,
-		allUsers: getGroup(groupId).users
+		allUsers
 	}));
 
 }

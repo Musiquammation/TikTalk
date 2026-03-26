@@ -147,6 +147,31 @@ export class Handler {
 			}
 		}
 
+		// Mark as quiting group
+		const u = this.users.get(session);
+		if (!u) {
+			throw new Error("Cannot find session");
+		}
+
+		const group = u.group ?this.groups.get(u.group) : null;
+		if (group) {
+			const author = group.allUsers.indexOf(u.id);
+			for (const us of group.users) {
+				if (us === session)
+					continue; // same user
+	
+				const user = this.users.get(us);
+				if (!user || !user.ws)
+					continue;
+	
+				user.ws.send(JSON.stringify({
+					action: 'quitConv',
+					author,
+					groupId: u.group,
+				}));
+			}
+		}
+
 		this.users.delete(session);
 		this.talkRequests = this.talkRequests.filter(r => r.session !== session);
 	}
@@ -262,6 +287,31 @@ export class Handler {
 			throw new Error("Cannot find session");
 		}
 
+		// Send quit to previous group
+		if (u.group) {
+			const group = this.groups.get(u.group);
+			if (!group) {
+				throw new Error("Active group cannot be found");
+			}
+
+			const author = group.allUsers.indexOf(u.id);
+			// Send quit
+			for (const us of group.users) {
+				if (us === session)
+					continue; // same user
+
+				const user = this.users.get(us);
+				if (!user || !user.ws)
+					continue;
+
+				user.ws.send(JSON.stringify({
+					action: 'quitConv',
+					author,
+					groupId,
+				}));
+			}
+		}
+
 		// Quit previous group
 		u.group = null;
 
@@ -270,20 +320,47 @@ export class Handler {
 		if (groupId === null)
 			return null;
 
-		if (allUsers === null)
+		if (!allUsers)
 			throw new Error("Missing allUsers");
 
+
 		// Check given allUsers
-		allUsers.push(u.id);
 		const candidateId = await generateGroupId(allUsers);
 		if (candidateId !== groupId) {
 			throw new Error("allUsers list does not match groupId");
 		}
 
-		// Create group
-		if (!this.groups.has(groupId)) {
+		const connected = new Set<number>();
+		const group = this.groups.get(groupId);
+
+		if (group) {
+			// Send user entering
+			const author = group.allUsers.indexOf(u.id);
+
+			// Send user entered and list connected users
+			for (const us of group.users) {
+				if (us === session)
+					continue; // same user
+
+				const user = this.users.get(us);
+				if (!user || !user.ws)
+					continue;
+
+				connected.add(group.allUsers.indexOf(user.id));
+
+				user.ws.send(JSON.stringify({
+					action: 'enterConv',
+					author,
+					groupId,
+				}));
+			}
+
+
+			
+		} else {
+			// Create group
 			const activeSessions = [...this.users.entries()]
-				.filter(([_, u]) => allUsers.includes(u.id))
+				.filter(([_, t]) => allUsers.includes(t.id))
 				.map(([s]) => s);
 
 			this.groups.set(groupId, new Group(activeSessions, allUsers));
@@ -291,8 +368,14 @@ export class Handler {
 
 		u.group = groupId;
 
+
+
 		// Collect missed messages
-		return await this.db.collectMissedMessages(u.id, groupId);
+		const missed = await this.db.collectMissedMessages(u.id, groupId);
+		return {
+			missed,
+			connected: Array.from(connected)
+		};
 	}
 
 	pushMessage(session: session_t, content: string,
@@ -318,7 +401,6 @@ export class Handler {
 		const author = group.allUsers.indexOf(u.id);
 
 		// Send message to connected users
-		console.log(group.users);
 		for (const us of group.users) {
 			if (us === session)
 				continue; // same user

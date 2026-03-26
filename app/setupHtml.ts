@@ -4,22 +4,28 @@ import { Conversation } from "./Conversation";
 import { loadGroups } from "./groups";
 
 let publicUsername: string | null = null;
+let publicId: string | null = null;
 
-let setConnectionItemResolve: ((name: string)=>void) | null = null;
+let setConnectionItemResolve: ((name: string, id: string) => void) | null = null;
 
 export function getUsername() {
 	return publicUsername;
 }
 
-export function setUsername(name: string | undefined) {
+export function getUserId() {
+	return publicId;
+}
+
+export function setUsername(name: string | undefined, id: string) {
 	if (name === undefined)
 		throw TypeError("Username is undefined");
 
 	publicUsername = name;
-	if (setConnectionItemResolve) {
-		setConnectionItemResolve(name);
-	}
+	publicId = id;
 
+	if (setConnectionItemResolve) {
+		setConnectionItemResolve(name, id);
+	}
 }
 
 export function setupHtml() {
@@ -39,7 +45,7 @@ export function setupHtml() {
 	// --- Shared auth logic ---
 	async function authenticate(
 		endpoint: 'login' | 'register',
-		credentials: { email: string; password: string; name?: string },
+		credentials: { email: string; password: string; name?: string; id?: string },
 		errorDiv: HTMLElement | null
 	): Promise<void> {
 		try {
@@ -52,15 +58,15 @@ export function setupHtml() {
 			const data = await response.json();
 	
 			if (response.ok) {
-				// Store connection data
 				if (errorDiv) {
-					if (credentials.name !== undefined)  {
-						setUsername(credentials.name);
+					if (credentials.name !== undefined) {
+						// name and id are already known (register flow or auto-login)
+						setUsername(credentials.name, credentials.id!);
 						localStorage.setItem('tiktalk-connection', JSON.stringify(credentials));
-
 					} else {
-						setConnectionItemResolve = (name: string) => {
-							const sc = {...credentials, name};
+						// name and id will be received together from the server response
+						setConnectionItemResolve = (name: string, id: string) => {
+							const sc = { ...credentials, name, id };
 							localStorage.setItem('tiktalk-connection', JSON.stringify(sc));
 							setConnectionItemResolve = null;
 							loadGroups();
@@ -69,11 +75,9 @@ export function setupHtml() {
 
 					errorDiv.classList.add('hidden');
 				}
-	
-	
-	
+
 				startConnection(data);
-	
+
 			} else if (errorDiv) {
 				errorDiv.textContent = data.error || `${endpoint === 'login' ? 'Login' : 'Registration'} failed`;
 				errorDiv.classList.remove('hidden');
@@ -107,16 +111,16 @@ export function setupHtml() {
 		await authenticate('register', { name, email, password }, document.getElementById('registerError')!);
 	});
 	
-	// Autologin
+	// Auto-login using stored credentials
 	try {
 		const stored = localStorage.getItem('tiktalk-connection');
 		if (!stored)
 			throw new Error("Cannot auto-login");
 	
-		const credentials = JSON.parse(stored) as 
-			{ name: string; email: string; password: string };
+		const credentials = JSON.parse(stored) as
+			{ name: string; id: string; email: string; password: string };
 	
-		setUsername(credentials.name);
+		setUsername(credentials.name, credentials.id);
 		authenticate('login', credentials, null);
 
 		loadGroups();
@@ -135,7 +139,6 @@ export function setupHtml() {
 		if (t) {
 			setTalkRequestButton(t);
 		}
-
 	});
 }
 
@@ -164,9 +167,7 @@ export function setTalkRequestButton(talk: 'talk' | 'cancel' | 'canceling') {
 		btn.classList.add('Canceling');
 		btn.textContent = "Canceling";
 		break;
-
 	}
-	
 }
 
 export function getTalkRequestStatus() {
@@ -177,4 +178,3 @@ export function getTalkRequestStatus() {
 export const conversation = new Conversation(
 	document.getElementById("conv")! as HTMLDivElement,
 );
-

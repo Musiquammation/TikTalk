@@ -341,11 +341,11 @@
     }));
   }
   function stopConnection() {
-    if (!global)
-      return;
-    global.socket.close();
+    if (global) {
+      global.socket.close();
+      global = null;
+    }
     localStorage.removeItem("tiktalk-connection");
-    global = null;
   }
 
   // app/Conversation.ts
@@ -843,6 +843,7 @@
     overlay.classList.remove("open");
   }
   function setupHtml() {
+    openHtmlPage("loginPage");
     document.getElementById("showRegister").addEventListener("click", (e) => {
       e.preventDefault();
       document.getElementById("loginContainer").classList.add("hidden");
@@ -904,19 +905,21 @@
       const password = document.getElementById("regPassword").value;
       await authenticate("register", { name, email, password }, document.getElementById("registerError"));
     });
-    try {
-      const stored = localStorage.getItem("tiktalk-connection");
-      if (!stored)
-        throw new Error("Cannot auto-login");
-      const credentials = JSON.parse(stored);
-      setUsername(credentials.name, credentials.id);
-      authenticate("login", credentials, null);
-      loadGroups();
-    } catch (e) {
-      console.error(e);
+    const storedConnection = localStorage.getItem("tiktalk-connection");
+    if (storedConnection) {
+      try {
+        const credentials = JSON.parse(storedConnection);
+        console.log(credentials);
+        setUsername(credentials.name, credentials.id);
+        loadGroups();
+        authenticate("login", credentials, null);
+      } catch (e) {
+        console.error(e);
+      }
     }
     document.getElementById("disconnect").addEventListener("click", () => {
       stopConnection();
+      openHtmlPage("loginPage");
     });
     document.getElementById("talk").addEventListener("click", () => {
       const t = toggleTalkRequest();
@@ -924,8 +927,15 @@
         setTalkRequestButton(t);
       }
     });
+    document.getElementById("accountBtn").addEventListener(
+      "click",
+      () => openHtmlPage("account")
+    );
+    document.getElementById("account-back").addEventListener(
+      "click",
+      () => openHtmlPage("app")
+    );
     document.getElementById("sidePanelOverlay").addEventListener("click", focusOnAppConv);
-    openHtmlPage("loginPage");
   }
 
   // app/index.ts

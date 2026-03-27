@@ -266,13 +266,12 @@ function cancelTalkRequest() {
 
 
 export function stopConnection() {
-	if (!global)
-		return;
+	if (global) {
+		global.socket.close();
+		global = null;
+	}
 
 	
-	global.socket.close();
 	localStorage.removeItem('tiktalk-connection');
-
-	global = null;
 }
 

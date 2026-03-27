@@ -118,6 +118,8 @@ export function focusOnAppConv() {
 
 
 export function setupHtml() {
+	openHtmlPage('loginPage');
+
 	// Toggle forms
 	document.getElementById('showRegister')!.addEventListener('click', (e) => {
 		e.preventDefault();
@@ -201,25 +203,26 @@ export function setupHtml() {
 	});
 	
 	// Auto-login using stored credentials
-	try {
-		const stored = localStorage.getItem('tiktalk-connection');
-		if (!stored)
-			throw new Error("Cannot auto-login");
+	const storedConnection = localStorage.getItem('tiktalk-connection');
+	if (storedConnection) {
+		try {	
+			const credentials = JSON.parse(storedConnection) as
+				{ name: string; id: string; email: string; password: string };
+		
+			console.log(credentials);
+			setUsername(credentials.name, credentials.id);
+			loadGroups();
+			authenticate('login', credentials, null);
 	
-		const credentials = JSON.parse(stored) as
-			{ name: string; id: string; email: string; password: string };
-	
-		setUsername(credentials.name, credentials.id);
-		authenticate('login', credentials, null);
-
-		loadGroups();
-	} catch (e) {
-		console.error(e);
+		} catch (e) {
+			console.error(e);
+		}
 	}
 
 	// Disconnect
 	document.getElementById('disconnect')!.addEventListener('click', () => {
 		stopConnection();
+		openHtmlPage('loginPage')
 	});
 
 	// Talk
@@ -230,12 +233,14 @@ export function setupHtml() {
 		}
 	});
 
-	
+	document.getElementById('accountBtn')!.addEventListener('click',
+		() => openHtmlPage('account'));
+
+	document.getElementById('account-back')!.addEventListener('click',
+		() => openHtmlPage('app'));
 	
 	document.getElementById('sidePanelOverlay')!
 		.addEventListener('click', focusOnAppConv);
 
-
-	openHtmlPage('loginPage');
 	
 }

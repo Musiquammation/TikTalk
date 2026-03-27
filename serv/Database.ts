@@ -13,10 +13,6 @@ export class Database {
 
 	async initializeTables(): Promise<void> {
 		await this.pool.query(`
-			DROP TABLE sendMsg;
-			DROP TABLE messages;
-
-
 			CREATE TABLE IF NOT EXISTS users (
 				id TEXT PRIMARY KEY,
 				email TEXT UNIQUE NOT NULL,

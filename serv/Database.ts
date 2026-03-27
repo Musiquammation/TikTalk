@@ -59,7 +59,7 @@ export class Database {
 			[email+"", password+""]
 		);
 
-		if (!result.rows)
+		if (result.rows.length <= 0)
 			return null;
 
 		return result.rows[0] as {id: string, name: string};

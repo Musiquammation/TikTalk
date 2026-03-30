@@ -52,6 +52,14 @@ export class Conversation {
 	private typingEl: HTMLDivElement | null = null;
 	private typingInterval: ReturnType<typeof setInterval> | null = null;
 
+	private onlineEl: HTMLSpanElement | null = null;
+	private onlineIds: Set<number> = new Set();
+
+	// Promise resolved by open() once onlineEl is created
+	private _onlineElReady: Promise<void> | null = null;
+	private _onlineElResolve: (() => void) | null = null;
+	private _onlineElConvId: string | null = null;
+
 	constructor(panel: HTMLDivElement) {
 		this.panel = panel;
 		this.panel.classList.add("conv-panel");
@@ -191,6 +199,16 @@ export class Conversation {
 			this.typingEl = null;
 		}
 
+		// Reset online state when opening a conversation
+		this.onlineIds.clear();
+		this.onlineEl = null;
+
+		// Prepare a new promise for this convId — resolved once onlineEl is created below
+		this._onlineElConvId = id;
+		this._onlineElReady = new Promise<void>((resolve) => {
+			this._onlineElResolve = resolve;
+		});
+
 		// Ensure meta exists in DB
 		let meta = await this.getMeta(id);
 		if (!meta) {
@@ -204,7 +222,9 @@ export class Conversation {
 		this.panel.innerHTML = "";
 		this.panel.setAttribute("data-conv-id", id);
 
+		// buildHeader creates onlineEl — resolve the promise immediately after
 		this.panel.appendChild(this.buildHeader(usernames));
+		this._onlineElResolve?.();
 
 		this.loaderEl = this.buildLoader();
 		this.panel.appendChild(this.loaderEl);
@@ -319,6 +339,39 @@ export class Conversation {
 		this.updateLoader();
 	}
 
+	addOnlineUsers(ids: number[], groupId: string) {
+		ids.forEach(id => this.onlineIds.add(id));
+		void this.updateOnlineUI([...this.onlineIds], groupId);
+	}
+
+	removeOnlineUser(id: number, groupId: string) {
+		this.onlineIds.delete(id);
+		void this.updateOnlineUI([...this.onlineIds], groupId);
+	}
+
+	private async updateOnlineUI(ids: number[], groupId: string): Promise<void> {
+		// onlineEl already exists and belongs to the current conv — execute directly
+		if (this.onlineEl && this._onlineElConvId === this.currentId) {
+			this._applyOnlineUI(ids);
+			return;
+		}
+
+		// onlineEl not ready yet — wait for open() to create it
+		const expectedConvId = this.currentId;
+		await this._onlineElReady;
+
+		// Conversation may have changed while we were waiting — discard stale update
+		if (this.currentId !== expectedConvId) return;
+
+		this._applyOnlineUI(ids);
+	}
+
+	private _applyOnlineUI(ids: number[]): void {
+		if (!this.onlineEl) return;
+		const names = ids.map(id => this.usernames[this.getIdx(id)] ?? `User ${id}`);
+		this.onlineEl.textContent = names.length ? `● ${names.join(", ")} online` : "";
+	}
+
 	// ─── DOM builders ─────────────────────────────────────────────────────────
 
 	private buildHeader(usernames: string[]): HTMLDivElement {
@@ -336,7 +389,14 @@ export class Conversation {
 				? usernames.join(" & ")
 				: `${usernames[0]} + ${usernames.length - 1} others`;
 
-		header.append(menuBtn, title);
+		this.onlineEl = document.createElement("span");
+		this.onlineEl.className = "conv-online";
+
+		const titleGroup = document.createElement("div");
+		titleGroup.className = "conv-title-group";
+		titleGroup.append(title, this.onlineEl);
+
+		header.append(menuBtn, titleGroup);
 
 		menuBtn.addEventListener("click", focusOnAppPanel);
 

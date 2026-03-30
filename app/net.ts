@@ -82,8 +82,6 @@ export function startConnection(data: any) {
 				author: string;
 			}[];
 
-			console.log(missedList);
-
 			console.log("Connected are:", msg.connected);
 
 
@@ -107,6 +105,7 @@ export function startConnection(data: any) {
 
 			updateGroupStorage();
 
+			conversation.addOnlineUsers(msg.connected, group.id);
 			break;
 		}
 
@@ -146,16 +145,20 @@ export function startConnection(data: any) {
 
 		case 'enterConv':
 		{
+			const group = getGroup()!;
 			console.log(`User #${msg.author} enters`);
+			conversation.addOnlineUsers([msg.author], group.id);
 			break;
 		}
 
 		case 'quitConv':
 		{
+			const group = getGroup()!;
 			console.log(`User #${msg.author} quits`);
 			if (msg.groupId !== getGroup().id)
 				return;
 
+			conversation.removeOnlineUser(msg.author, group.id);
 			conversation.removeTyping(msg.author);
 			break;
 		}

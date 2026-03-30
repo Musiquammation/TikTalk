@@ -14,6 +14,7 @@
   --accent:    #7c6af7;
   --accent2:   #a78bfa;
   --overlay:   #1a1a2e22;
+  --color-text-success: #4ade80;
   --radius:    18px;
   --side-w:    260px;
   --header-h:  54px;
@@ -29,6 +30,8 @@
     --text-muted:#7b7b96;
     --bubble-l:  #22222c;
     --overlay:   #00000066;
+    --color-text-success: #34d399;
+
   }
 }
 
@@ -330,6 +333,18 @@ button:active { transform: scale(.97); }
   padding: .5rem;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
+}
+
+.conv-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.conv-online {
+  font-size: 11px;
+  color: var(--color-text-success);
+  line-height: 1;
 }
 
 /* ─── Messages ───────────────────────────────────────────────── */
